@@ -9,7 +9,7 @@ use tokenizer::tokenize;
 use vm::run_vm;
 
 fn main() {
-    let source = "2 * (3 + 4) * 5";
+    let source = "x = 10";
 
     println!("=== yathon VM ===");
     println!("Source code: {}\n", source);

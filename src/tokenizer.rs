@@ -1,13 +1,15 @@
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    Number(i32),
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    LParen,
-    RParen,
-    EOF,
+    Number(i32),  // 1, 2, 3, ..., 4 294 967 295
+    Plus,         // +
+    Minus,        // -
+    Star,         // *
+    Slash,        // /
+    LParen,       // (
+    RParen,       // )
+    Name(String), // var_name
+    Assign,       // =
+    EOF,          // <Flag For Code Finish>
 }
 
 pub fn tokenize(input: &str) -> Vec<Token> {
@@ -21,6 +23,7 @@ pub fn tokenize(input: &str) -> Vec<Token> {
 
         if ch.is_digit(10) {
             let mut num_str = ch.to_string();
+            // TODO: How to iterate without cloning?
             for next_ch in chars.clone() {
                 if next_ch.is_digit(10) {
                     num_str.push(next_ch);
@@ -34,6 +37,21 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             continue;
         }
 
+        if ch.is_alphabetic() || ch == '_' {
+            let mut name = ch.to_string();
+            // TODO: How to iterate without cloning?
+            for next_ch in chars.clone() {
+                if next_ch.is_alphanumeric() || next_ch == '_' {
+                    name.push(next_ch);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            tokens.push(Token::Name(name));
+            continue;
+        }
+
         match ch {
             '+' => tokens.push(Token::Plus),
             '-' => tokens.push(Token::Minus),
@@ -41,7 +59,8 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             '/' => tokens.push(Token::Slash),
             '(' => tokens.push(Token::LParen),
             ')' => tokens.push(Token::RParen),
-            _ => panic!("Неизвестный символ: {}", ch),
+            '=' => tokens.push(Token::Assign),
+            _ => panic!("Unknown token: {}", ch),
         }
     }
     tokens.push(Token::EOF);
