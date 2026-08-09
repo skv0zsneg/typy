@@ -2,7 +2,7 @@ use crate::tokenizer::Token;
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
-    Number(i32),
+    Number(i64),
     Name(String),
     Assign {
         name: String,
