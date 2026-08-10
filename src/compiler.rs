@@ -1,17 +1,28 @@
+use crate::object::Object;
 use crate::parser::{Expr, Operator};
 use crate::symbol::Interner;
 use crate::symbol::SymbolId;
-use crate::value::Value;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    LoadConst(Value),
+    // Vars & constants
+    LoadConst(Object),
     LoadName(SymbolId),
     StoreName(SymbolId),
+
+    // Arithmetic
     Add,
     Subtract,
     Multiply,
     Divide,
+
+    // Comparison
+    Eq,
+    NotEq,
+    Less,
+    Greater,
+    LessEq,
+    GreaterEq,
 }
 
 pub struct Compiler {
@@ -29,7 +40,6 @@ impl Compiler {
         Compiler { code: Vec::new() }
     }
 
-    // interner передается как аргумент
     pub fn compile(mut self, expr: &Expr, interner: &mut Interner) -> Vec<Instruction> {
         self.compile_expr(expr, interner);
         self.code
@@ -38,8 +48,10 @@ impl Compiler {
     fn compile_expr(&mut self, expr: &Expr, interner: &mut Interner) {
         match expr {
             Expr::Number(n) => {
-                self.code
-                    .push(Instruction::LoadConst(Value::Int(*n )));
+                self.code.push(Instruction::LoadConst(Object::Int(*n)));
+            }
+            Expr::Bool(n) => {
+                self.code.push(Instruction::LoadConst(Object::Bool(*n)));
             }
             Expr::Name(name) => {
                 let sym_id = interner.intern(name);
@@ -58,6 +70,12 @@ impl Compiler {
                     Operator::Minus => self.code.push(Instruction::Subtract),
                     Operator::Star => self.code.push(Instruction::Multiply),
                     Operator::Slash => self.code.push(Instruction::Divide),
+                    Operator::Eq => self.code.push(Instruction::Eq),
+                    Operator::NotEq => self.code.push(Instruction::NotEq),
+                    Operator::Greater => self.code.push(Instruction::Greater),
+                    Operator::GreaterEq => self.code.push(Instruction::GreaterEq),
+                    Operator::Less => self.code.push(Instruction::Less),
+                    Operator::LessEq => self.code.push(Instruction::LessEq),
                 }
             }
         }

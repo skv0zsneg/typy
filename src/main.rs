@@ -1,13 +1,12 @@
-mod checker;
+mod types;
 mod compiler;
 mod parser;
 mod symbol;
 mod tokenizer;
-mod types;
-mod value;
+mod object;
 mod vm;
 
-use checker::Checker;
+use types::Checker;
 use compiler::Compiler;
 use parser::Parser;
 use std::io::{self, Write};

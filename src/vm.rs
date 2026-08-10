@@ -1,11 +1,11 @@
 use crate::compiler::Instruction;
+use crate::object::Object;
 use crate::symbol::{Interner, SymbolId};
-use crate::value::Value;
 use std::collections::HashMap;
 
 pub struct VM {
-    stack: Vec<Value>,
-    globals: HashMap<SymbolId, Value>,
+    stack: Vec<Object>,
+    globals: HashMap<SymbolId, Object>,
 }
 
 impl Default for VM {
@@ -27,7 +27,7 @@ impl VM {
         bytecode: &[Instruction],
         interner: &Interner,
         debug: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Object, String> {
         for (ip, instruction) in bytecode.iter().enumerate() {
             if debug {
                 println!(
@@ -62,6 +62,13 @@ impl VM {
                 Instruction::Subtract => self.binary_op(|a, b| a.sub(b))?,
                 Instruction::Multiply => self.binary_op(|a, b| a.mul(b))?,
                 Instruction::Divide => self.binary_op(|a, b| a.div(b))?,
+
+                Instruction::Eq => self.compare_op(|a, b| a.eq(b))?,
+                Instruction::NotEq => self.compare_op(|a, b| a.ne(b))?,
+                Instruction::Greater => self.compare_op(|a, b| a.gt(b))?,
+                Instruction::GreaterEq => self.compare_op(|a, b| a.ge(b))?,
+                Instruction::Less => self.compare_op(|a, b| a.lt(b))?,
+                Instruction::LessEq => self.compare_op(|a, b| a.le(b))?,
             }
         }
 
@@ -72,7 +79,7 @@ impl VM {
 
     fn binary_op<F>(&mut self, op: F) -> Result<(), String>
     where
-        F: FnOnce(&Value, &Value) -> Result<Value, String>,
+        F: FnOnce(&Object, &Object) -> Result<Object, String>,
     {
         let right = self
             .stack
@@ -84,6 +91,23 @@ impl VM {
             .ok_or("SystemError: stack underflow (left)")?;
         let result = op(&left, &right)?;
         self.stack.push(result);
+        Ok(())
+    }
+
+    fn compare_op<F>(&mut self, op: F) -> Result<(), String>
+    where
+        F: FnOnce(&Object, &Object) -> Result<bool, String>,
+    {
+        let right = self
+            .stack
+            .pop()
+            .ok_or("SystemError: stack underflow (right)")?;
+        let left = self
+            .stack
+            .pop()
+            .ok_or("SystemError: stack underflow (left)")?;
+        let result = op(&left, &right)?;
+        self.stack.push(Object::Bool(result));
         Ok(())
     }
 }

@@ -1,8 +1,8 @@
-use yathon::checker::Checker;
 use yathon::compiler::Compiler;
 use yathon::parser::Parser;
 use yathon::symbol::Interner;
 use yathon::tokenizer::tokenize;
+use yathon::types::Checker;
 use yathon::vm::VM;
 
 fn execute_one_line(source: &str) -> String {
@@ -102,7 +102,46 @@ fn test_static_name_error() {
 
 #[test]
 fn test_multiple_vars_persistence() {
-    // Этот тест упадет, если Interner создается внутри цикла
     let result = execute_several_lines(vec!["x = 10", "y = 20", "x + y"]);
     assert_eq!(result, vec!["10", "20", "30"]);
+}
+
+#[test]
+fn test_bool_literal() {
+    let result = execute_one_line("True");
+    assert_eq!(result, "True".to_string());
+    let result = execute_one_line("False");
+    assert_eq!(result, "False".to_string());
+}
+
+#[test]
+fn test_comparison() {
+    let result = execute_one_line("10 > 5");
+    assert_eq!(result, "True".to_string());
+    let result = execute_one_line("2 == 2");
+    assert_eq!(result, "True".to_string());
+    let result = execute_one_line("3 < 1");
+    assert_eq!(result, "False".to_string());
+}
+
+#[test]
+fn test_precedence() {
+    let result = execute_one_line("2 + 3 < 10");
+    assert_eq!(result, "True".to_string());
+    let result = execute_one_line("2 < 3 + 4");
+    assert_eq!(result, "True".to_string());
+}
+
+#[test]
+fn test_static_type_error() {
+    let result = execute_one_line("10 + True");
+    assert_eq!(
+        result,
+        "TypeError: unsupported operand types for arithmetic: 'int' and 'bool'".to_string()
+    );
+    let result = execute_one_line("10 < True");
+    assert_eq!(
+        result,
+        "TypeError: cannot compare 'int' and 'bool'".to_string()
+    );
 }

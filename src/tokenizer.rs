@@ -1,8 +1,14 @@
 /// Tokens using in languages
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    /// Signed 32 bit number.
+    /// Signed 64 bit number.
     Number(i64),
+
+    /// Bolean "True"
+    True,
+    /// Bolean "False"
+    False,
+
     /// Plus "+"
     Plus,
     /// Minus "-"
@@ -11,14 +17,31 @@ pub enum Token {
     Star,
     /// Slash "/"
     Slash,
+
+    /// Equal "=="
+    Eq,
+    /// Equal "!="
+    NotEq,
+    /// Greater ">"
+    Greater,
+    /// Less "<"
+    Less,
+    /// Greater equal ">="
+    GreaterEq,
+    /// Less equal "<="
+    LessEq,
+
     /// Open paren "("
     LParen,
     /// Closed paren ")"       
     RParen,
+
     /// Name for variavle - string
     Name(String),
+
     /// Assign "="
     Assign,
+
     /// Flag end of code
     EOF,
 }
@@ -26,41 +49,82 @@ pub enum Token {
 /// Tokenize incoming code.
 pub fn tokenize(input: String) -> Vec<Token> {
     let mut tokens = Vec::new();
-    let mut chars = input.chars();
+    let mut chars = input.chars().peekable();
 
     while let Some(ch) = chars.next() {
         if ch.is_whitespace() {
             continue;
         }
 
-        if ch.is_ascii_digit() {
+        if ch.is_digit(10) {
             let mut num_str = ch.to_string();
-            // TODO: How to iterate without cloning?
-            for next_ch in chars.clone() {
-                if next_ch.is_ascii_digit() {
-                    num_str.push(next_ch);
-                    chars.next();
+            while let Some(&next_ch) = chars.peek() {
+                if next_ch.is_digit(10) {
+                    num_str.push(chars.next().unwrap());
                 } else {
                     break;
                 }
             }
-            let num = num_str.parse::<i64>().unwrap();
-            tokens.push(Token::Number(num));
+            tokens.push(Token::Number(num_str.parse::<i64>().unwrap()));
             continue;
         }
 
         if ch.is_alphabetic() || ch == '_' {
             let mut name = ch.to_string();
-            // TODO: How to iterate without cloning?
-            for next_ch in chars.clone() {
+            while let Some(&next_ch) = chars.peek() {
                 if next_ch.is_alphanumeric() || next_ch == '_' {
-                    name.push(next_ch);
-                    chars.next();
+                    name.push(chars.next().unwrap());
                 } else {
                     break;
                 }
             }
-            tokens.push(Token::Name(name));
+
+            // Key words handling.
+            match name.as_str() {
+                "True" => tokens.push(Token::True),
+                "False" => tokens.push(Token::False),
+                _ => tokens.push(Token::Name(name)),
+            }
+            continue;
+        }
+
+        if ch == '<' {
+            if chars.peek() == Some(&'=') {
+                chars.next();
+                tokens.push(Token::LessEq);
+            } else {
+                tokens.push(Token::Less);
+            }
+            continue;
+        }
+
+        if ch == '>' {
+            if chars.peek() == Some(&'=') {
+                chars.next();
+                tokens.push(Token::GreaterEq);
+            } else {
+                tokens.push(Token::Greater);
+            }
+            continue;
+        }
+
+        if ch == '=' {
+            if chars.peek() == Some(&'=') {
+                chars.next();
+                tokens.push(Token::Eq);
+            } else {
+                tokens.push(Token::Assign);
+            }
+            continue;
+        }
+
+        if ch == '!' {
+            if chars.peek() == Some(&'=') {
+                chars.next();
+                tokens.push(Token::NotEq);
+            } else {
+                panic!("SyntaxError: unknown token: !");
+            }
             continue;
         }
 
@@ -71,11 +135,9 @@ pub fn tokenize(input: String) -> Vec<Token> {
             '/' => tokens.push(Token::Slash),
             '(' => tokens.push(Token::LParen),
             ')' => tokens.push(Token::RParen),
-            '=' => tokens.push(Token::Assign),
-            _ => panic!("Unknown token: {}", ch),
+            _ => panic!("SyntaxError: unknown token: {}", ch),
         }
     }
     tokens.push(Token::EOF);
     tokens
 }
-
