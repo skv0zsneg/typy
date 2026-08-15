@@ -23,7 +23,7 @@ fn execute_one_line(source: &str) -> String {
     let mut vm = VM::new();
     match vm.run(&bytecode, &interner, false) {
         Ok(result) => format!("{}", result),
-        Err(e) => format!("{}", e),
+        Err(e) => e.to_string(),
     }
 }
 
@@ -49,7 +49,7 @@ fn execute_several_lines(lines: Vec<&str>) -> Vec<String> {
 
         let result = match vm.run(&bytecode, &interner, false) {
             Ok(result) => format!("{}", result),
-            Err(e) => format!("{}", e),
+            Err(e) => e.to_string(),
         };
         results.push(result);
     }
