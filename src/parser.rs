@@ -192,7 +192,7 @@ impl Parser {
     /// Parse Statement
     /// ---------------
     /// `statement = assignment | expression`
-    /// 
+    ///
     /// `assignment = NAME '=' expression`
     pub fn parse_statement(&mut self) -> Result<Expr, String> {
         if let Token::Name(name) = self.current().clone() {
