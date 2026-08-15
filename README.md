@@ -25,6 +25,11 @@ $ typy
 2
 ```
 
-## Backend
+## Contributing
 
-Fully write in Rust using stack virtual machine.
+Language was written in Rust using a stack virtual machine. Before making PR, be sure that your code is successful:
+
+1. Formatted `cargo fmt --all -- --check`
+2. Linted `cargo clippy --locked --all-targets --all-features -- -D warnings`
+3. Tested `cargo test --locked --all-features --verbose`
+4. Built `cargo build --locked --verbose`
