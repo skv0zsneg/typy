@@ -26,7 +26,7 @@ fn get_code_row() -> String {
 
 fn main() {
     let debug = true;
-    println!("===== yathon | REPL =====");
+    println!("=== TyPy (v 0.1.0) ===");
     if debug {
         println!("Debug mode is ON.");
     }

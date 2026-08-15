@@ -1,9 +1,9 @@
-use yathon::compiler::Compiler;
-use yathon::parser::Parser;
-use yathon::symbol::Interner;
-use yathon::tokenizer::tokenize;
-use yathon::types::Checker;
-use yathon::vm::VM;
+use typy::compiler::Compiler;
+use typy::parser::Parser;
+use typy::symbol::Interner;
+use typy::tokenizer::tokenize;
+use typy::types::Checker;
+use typy::vm::VM;
 
 fn execute_one_line(source: &str) -> String {
     let tokens = tokenize(source.to_string());
