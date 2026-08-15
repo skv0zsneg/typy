@@ -1,18 +1,23 @@
-mod types;
 mod compiler;
+mod object;
 mod parser;
 mod symbol;
 mod tokenizer;
-mod object;
+mod types;
 mod vm;
 
-use types::Checker;
 use compiler::Compiler;
 use parser::Parser;
+use std::env;
 use std::io::{self, Write};
 use symbol::Interner;
 use tokenizer::tokenize;
+use types::Checker;
 use vm::VM;
+
+struct Config {
+    debug: bool,
+}
 
 fn get_code_row() -> String {
     print!(">>> ");
@@ -24,10 +29,25 @@ fn get_code_row() -> String {
     stdin_conetent
 }
 
+fn get_config_from_args() -> Config {
+    let args: Vec<String> = env::args().collect();
+
+    let mut debug = false;
+    for arg in &args[1..] {
+        if arg == "--debug" || arg == "-d" {
+            debug = true;
+        } else {
+            panic!("Got unknown argument: {}", arg);
+        };
+    }
+
+    Config { debug }
+}
+
 fn main() {
-    let debug = true;
-    println!("=== TyPy (v 0.1.0) ===");
-    if debug {
+    let config = get_config_from_args();
+    println!("=== TyPy (v {}) ===", env!("CARGO_PKG_VERSION"));
+    if config.debug {
         println!("Debug mode is ON.");
     }
 
@@ -38,13 +58,13 @@ fn main() {
         let source = get_code_row();
 
         let tokens = tokenize(source);
-        if debug {
+        if config.debug {
             println!("[1] Tokens: {:?}", tokens);
         }
 
         let mut parser = Parser::new(tokens);
         let ast = parser.parse().expect("Parsing error");
-        if debug {
+        if config.debug {
             println!("\n[2] AST: {:#?}", ast);
         }
 
@@ -58,12 +78,12 @@ fn main() {
 
         let compiler = Compiler::new();
         let bytecode = compiler.compile(&ast, &mut interner);
-        if debug {
+        if config.debug {
             println!("\n[3] Byte-code: {:?}", bytecode);
             println!("\n[4] Running:");
         }
 
-        match vm.run(&bytecode, &interner, debug) {
+        match vm.run(&bytecode, &interner, config.debug) {
             Ok(result) => println!("{}", result),
             Err(e) => eprintln!("{}", e),
         }
