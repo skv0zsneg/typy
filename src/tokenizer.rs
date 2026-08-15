@@ -43,7 +43,7 @@ pub enum Token {
     Assign,
 
     /// Flag end of code
-    EOF,
+    Eof,
 }
 
 /// Tokenize incoming code.
@@ -56,10 +56,10 @@ pub fn tokenize(input: String) -> Vec<Token> {
             continue;
         }
 
-        if ch.is_digit(10) {
+        if ch.is_ascii_digit() {
             let mut num_str = ch.to_string();
             while let Some(&next_ch) = chars.peek() {
-                if next_ch.is_digit(10) {
+                if next_ch.is_ascii_digit() {
                     num_str.push(chars.next().unwrap());
                 } else {
                     break;
@@ -138,6 +138,6 @@ pub fn tokenize(input: String) -> Vec<Token> {
             _ => panic!("SyntaxError: unknown token: {}", ch),
         }
     }
-    tokens.push(Token::EOF);
+    tokens.push(Token::Eof);
     tokens
 }

@@ -44,7 +44,7 @@ impl Parser {
     }
 
     fn current(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or(&Token::EOF)
+        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
     }
 
     fn eat(&mut self, expected: Token) -> Result<(), String> {
@@ -62,7 +62,7 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<Expr, String> {
         let result = self.parse_statement()?;
-        self.eat(Token::EOF)?;
+        self.eat(Token::Eof)?;
         Ok(result)
     }
 
