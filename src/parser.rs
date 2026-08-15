@@ -2,8 +2,9 @@ use crate::tokenizer::Token;
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
-    Number(i32),
+    Number(i64),
     Name(String),
+    Bool(bool),
     Assign {
         name: String,
         value: Box<Expr>,
@@ -17,10 +18,19 @@ pub enum Expr {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Operator {
+    // Arithmetic
     Plus,
     Minus,
     Star,
     Slash,
+
+    // Comparison
+    Eq,
+    NotEq,
+    Less,
+    Greater,
+    LessEq,
+    GreaterEq,
 }
 
 pub struct Parser {
@@ -34,7 +44,7 @@ impl Parser {
     }
 
     fn current(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or(&Token::EOF)
+        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
     }
 
     fn eat(&mut self, expected: Token) -> Result<(), String> {
@@ -43,7 +53,7 @@ impl Parser {
             Ok(())
         } else {
             Err(format!(
-                "Ожидал {:?}, но получил {:?}",
+                "SyntaxError: expected {:?}, but got {:?}",
                 expected,
                 self.current()
             ))
@@ -52,11 +62,44 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<Expr, String> {
         let result = self.parse_statement()?;
-        self.eat(Token::EOF)?;
+        self.eat(Token::Eof)?;
         Ok(result)
     }
 
+    /// Parsing Expression
+    /// ------------------
+    /// `expression = addition ('>' | '>=' | '<' | '<=' | '==' | '!=') addition`
     fn parse_expression(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_addition()?;
+        loop {
+            let op = match self.current() {
+                Token::Eq => Some(Operator::Eq),
+                Token::NotEq => Some(Operator::NotEq),
+                Token::Less => Some(Operator::Less),
+                Token::Greater => Some(Operator::Greater),
+                Token::LessEq => Some(Operator::LessEq),
+                Token::GreaterEq => Some(Operator::GreaterEq),
+                _ => None,
+            };
+            if let Some(operator) = op {
+                self.pos += 1;
+                let right = self.parse_addition()?;
+                left = Expr::BinaryOp {
+                    left: Box::new(left),
+                    op: operator,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    /// Parse Addition
+    /// --------------
+    /// `addition = term ('+' | '-') term`
+    fn parse_addition(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_term()?;
         loop {
             let op = match self.current() {
@@ -79,6 +122,9 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parsing Term
+    /// ------------
+    /// `term = factor ('*' | '/') factor`
     fn parse_term(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_factor()?;
         loop {
@@ -102,6 +148,9 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parsing Factor
+    /// -------------
+    /// `factor = NUMBER | NAME | 'True' | 'False' | '(' expression ')'`
     fn parse_factor(&mut self) -> Result<Expr, String> {
         match self.current() {
             Token::Number(n) => {
@@ -116,6 +165,16 @@ impl Parser {
                 Ok(Expr::Name(var_name))
             }
 
+            Token::True => {
+                self.pos += 1;
+                Ok(Expr::Bool(true))
+            }
+
+            Token::False => {
+                self.pos += 1;
+                Ok(Expr::Bool(false))
+            }
+
             Token::LParen => {
                 self.pos += 1;
                 let expr = self.parse_expression()?;
@@ -124,14 +183,17 @@ impl Parser {
             }
 
             _ => Err(format!(
-                "Expected number or '(' but got {:?}",
+                "SyntaxError: expected number or '(' but got {:?}",
                 self.current()
             )),
         }
     }
 
-    // statement = assignment | expression
-    // assignment = NAME '=' expression
+    /// Parse Statement
+    /// ---------------
+    /// `statement = assignment | expression`
+    ///
+    /// `assignment = NAME '=' expression`
     pub fn parse_statement(&mut self) -> Result<Expr, String> {
         if let Token::Name(name) = self.current().clone() {
             let current_pos = self.pos;

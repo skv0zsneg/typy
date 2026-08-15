@@ -1,19 +1,30 @@
-# yathon
+# TyPy
 
-_Yet Another Python Implementation_
+_**Ty**ped **Py**thon_
 
-An attempt to recreate the Python interpreter for educational purposes.
+> ⚠️ Under Developing
 
-However, if you have any ideas for improvement or you find any errors - welcome to issues ❤️
+Programming Language fully inspired by Python. The Goal of it is to build clean and maintanable code using best of Python world. That's why this language is:
 
+1. Static Typed
+2. Simple
+3. Small
 
-## 🤖 Running
+## Quick Start
+
+We also support REPL:
 
 ```bash
-$ yathon
+$ typy
+=== TyPy (v 0.1.0) ===
+>>> a = 10
+10
+>>> b = 20
+20
+>>> b / a
+2
 ```
 
+## Backend
 
-## 🤗 Author
-
-Made with love by [@skv0zsneg](https://github.com/skv0zsneg)
+Fully write in Rust using stack virtual machine.

@@ -1,10 +1,17 @@
+use crate::compiler::Instruction;
+use crate::object::Object;
+use crate::symbol::{Interner, SymbolId};
 use std::collections::HashMap;
 
-use crate::compiler::Instruction;
-
 pub struct VM {
-    stack: Vec<i32>,
-    globals: HashMap<String, i32>,
+    stack: Vec<Object>,
+    globals: HashMap<SymbolId, Object>,
+}
+
+impl Default for VM {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VM {
@@ -15,68 +22,92 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self, bytecode: &[Instruction], debug: bool) -> Result<i32, String> {
+    pub fn run(
+        &mut self,
+        bytecode: &[Instruction],
+        interner: &Interner,
+        debug: bool,
+    ) -> Result<Object, String> {
         for (ip, instruction) in bytecode.iter().enumerate() {
-            match instruction {
-                Instruction::LoadConst(n) => self.stack.push(*n),
-
-                Instruction::LoadName(name) => {
-                    let value = self
-                        .globals
-                        .get(name)
-                        .ok_or_else(|| format!("NameError: '{}' is not defined", name))?;
-                    self.stack.push(*value);
-                }
-
-                Instruction::StoreName(name) => {
-                    let value = self.stack.pop().ok_or("Stack underflow at STORE")?;
-                    self.globals.insert(name.clone(), value);
-                }
-
-                Instruction::Add => {
-                    let b = self.stack.pop().ok_or("Stack underflow at ADD")?;
-                    let a = self.stack.pop().ok_or("Stack underflow at ADD")?;
-                    self.stack.push(a + b);
-                }
-
-                Instruction::Subtract => {
-                    let b = self.stack.pop().ok_or("Stack underflow at SUB")?;
-                    let a = self.stack.pop().ok_or("Stack underflow at SUB")?;
-                    self.stack.push(a - b);
-                }
-
-                Instruction::Multiply => {
-                    let b = self.stack.pop().ok_or("Stack underflow at MUL")?;
-                    let a = self.stack.pop().ok_or("Stack underflow at MUL")?;
-                    self.stack.push(a * b);
-                }
-
-                Instruction::Divide => {
-                    let b = self.stack.pop().ok_or("Stack underflow at DIV")?;
-                    let a = self.stack.pop().ok_or("Stack underflow at DIV")?;
-                    if b == 0 {
-                        return Err("Division by zero".to_string());
-                    }
-                    self.stack.push(a / b);
-                }
-            }
             if debug {
                 println!(
-                    "  [IP:{}] Stack: {:?}, Globals: {:?}",
-                    ip, self.stack, self.globals
+                    "  [IP:{:03}] {:?} | Stack: {:?}",
+                    ip, instruction, self.stack
                 );
+            }
+
+            match instruction {
+                Instruction::LoadConst(val) => {
+                    self.stack.push(val.clone());
+                }
+
+                Instruction::LoadName(sym_id) => {
+                    let value = self.globals.get(sym_id).ok_or_else(|| {
+                        let name = interner.resolve(*sym_id);
+                        format!("NameError: name '{}' is not defined", name)
+                    })?;
+                    self.stack.push(value.clone());
+                }
+
+                Instruction::StoreName(sym_id) => {
+                    let value = self
+                        .stack
+                        .last()
+                        .ok_or("SystemError: stack underflow at STORE_NAME")?
+                        .clone();
+                    self.globals.insert(*sym_id, value);
+                }
+
+                Instruction::Add => self.binary_op(|a, b| a.add(b))?,
+                Instruction::Subtract => self.binary_op(|a, b| a.sub(b))?,
+                Instruction::Multiply => self.binary_op(|a, b| a.mul(b))?,
+                Instruction::Divide => self.binary_op(|a, b| a.div(b))?,
+
+                Instruction::Eq => self.compare_op(|a, b| a.eq(b))?,
+                Instruction::NotEq => self.compare_op(|a, b| a.ne(b))?,
+                Instruction::Greater => self.compare_op(|a, b| a.gt(b))?,
+                Instruction::GreaterEq => self.compare_op(|a, b| a.ge(b))?,
+                Instruction::Less => self.compare_op(|a, b| a.lt(b))?,
+                Instruction::LessEq => self.compare_op(|a, b| a.le(b))?,
             }
         }
 
-        if self.stack.len() == 1 {
-            Ok(self.stack[0])
-        } else {
-            Err(format!("Invalid stack state: {:?}", self.stack))
-        }
+        self.stack
+            .pop()
+            .ok_or_else(|| "SystemError: empty stack after execution".to_string())
     }
-}
 
-pub fn run_vm(bytecode: &[Instruction], debug: bool) -> Result<i32, String> {
-    let mut vm = VM::new();
-    vm.run(bytecode, debug)
+    fn binary_op<F>(&mut self, op: F) -> Result<(), String>
+    where
+        F: FnOnce(&Object, &Object) -> Result<Object, String>,
+    {
+        let right = self
+            .stack
+            .pop()
+            .ok_or("SystemError: stack underflow (right)")?;
+        let left = self
+            .stack
+            .pop()
+            .ok_or("SystemError: stack underflow (left)")?;
+        let result = op(&left, &right)?;
+        self.stack.push(result);
+        Ok(())
+    }
+
+    fn compare_op<F>(&mut self, op: F) -> Result<(), String>
+    where
+        F: FnOnce(&Object, &Object) -> Result<bool, String>,
+    {
+        let right = self
+            .stack
+            .pop()
+            .ok_or("SystemError: stack underflow (right)")?;
+        let left = self
+            .stack
+            .pop()
+            .ok_or("SystemError: stack underflow (left)")?;
+        let result = op(&left, &right)?;
+        self.stack.push(Object::Bool(result));
+        Ok(())
+    }
 }
