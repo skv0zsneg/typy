@@ -3,12 +3,8 @@ use crate::tokenizer::Token;
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Number(i64),
-    Name(String),
     Bool(bool),
-    Assign {
-        name: String,
-        value: Box<Expr>,
-    },
+    Name(String),
     BinaryOp {
         left: Box<Expr>,
         op: Operator,
@@ -16,15 +12,27 @@ pub enum Expr {
     },
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Stmt {
+    Expr(Expr),
+    Assign {
+        name: String,
+        value: Expr,
+    },
+    If {
+        condition: Expr,
+        then_branch: Vec<Stmt>,
+        else_branch: Option<Vec<Stmt>>,
+    },
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Operator {
-    // Arithmetic
     Plus,
     Minus,
     Star,
     Slash,
 
-    // Comparison
     Eq,
     NotEq,
     Less,
@@ -60,15 +68,99 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Expr, String> {
-        let result = self.parse_statement()?;
-        self.eat(Token::Eof)?;
-        Ok(result)
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, String> {
+        let mut stmts = Vec::new();
+
+        while self.current() == &Token::NewLine {
+            self.pos += 1;
+        }
+        while self.current() != &Token::Eof {
+            let stmt = self.parse_statement()?;
+            stmts.push(stmt);
+
+            while self.current() == &Token::NewLine {
+                self.pos += 1;
+            }
+        }
+
+        Ok(stmts)
     }
 
-    /// Parsing Expression
+    /// Parse Statement
+    /// ---------------
+    /// `statement = (if-statement | NAME '=' expression | expression)`
+    fn parse_statement(&mut self) -> Result<Stmt, String> {
+        if self.current() == &Token::If {
+            return self.parse_if_statement();
+        }
+        if let Token::Name(name) = self.current().clone() {
+            let saved_pos = self.pos;
+            self.pos += 1;
+
+            if self.current() == &Token::Assign {
+                self.pos += 1;
+                let value = self.parse_expression()?;
+                return Ok(Stmt::Assign { name, value });
+            }
+            self.pos = saved_pos;
+        }
+        let expr = self.parse_expression()?;
+        Ok(Stmt::Expr(expr))
+    }
+
+    /// Parse If Statement
     /// ------------------
-    /// `expression = addition ('>' | '>=' | '<' | '<=' | '==' | '!=') addition`
+    /// `if-statement = 'if' expression ':' block ['else' block]`
+    fn parse_if_statement(&mut self) -> Result<Stmt, String> {
+        self.eat(Token::If)?;
+        let condition = self.parse_expression()?;
+        self.eat(Token::Colon)?;
+        let then_branch = self.parse_block()?;
+
+        let else_branch = if self.current() == &Token::Else {
+            self.pos += 1;
+            self.eat(Token::Colon)?;
+            Some(self.parse_block()?)
+        } else {
+            None
+        };
+
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
+    }
+
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, String> {
+        self.eat(Token::NewLine)?;
+        self.eat(Token::Indent)?;
+
+        let mut stmts = Vec::new();
+        while self.current() == &Token::NewLine {
+            self.pos += 1;
+        }
+
+        while self.current() != &Token::Dedent && self.current() != &Token::Eof {
+            stmts.push(self.parse_statement()?);
+
+            while self.current() == &Token::NewLine {
+                self.pos += 1;
+            }
+        }
+
+        self.eat(Token::Dedent)?;
+
+        if stmts.is_empty() {
+            return Err("SyntaxError: expected an indented block".to_string());
+        }
+
+        Ok(stmts)
+    }
+
+    /// Parse Expression
+    /// ----------------
+    /// `expresson = addition ('==' | '!=' | '<' | '>' | '<=' | '>=') addition`
     fn parse_expression(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_addition()?;
         loop {
@@ -158,59 +250,29 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Number(value))
             }
-
+            Token::True => {
+                self.pos += 1;
+                Ok(Expr::Bool(true))
+            }
+            Token::False => {
+                self.pos += 1;
+                Ok(Expr::Bool(false))
+            }
             Token::Name(name) => {
                 let var_name = name.clone();
                 self.pos += 1;
                 Ok(Expr::Name(var_name))
             }
-
-            Token::True => {
-                self.pos += 1;
-                Ok(Expr::Bool(true))
-            }
-
-            Token::False => {
-                self.pos += 1;
-                Ok(Expr::Bool(false))
-            }
-
             Token::LParen => {
                 self.pos += 1;
                 let expr = self.parse_expression()?;
                 self.eat(Token::RParen)?;
                 Ok(expr)
             }
-
             _ => Err(format!(
-                "SyntaxError: expected number or '(' but got {:?}",
+                "SyntaxError: expected expression but got {:?}",
                 self.current()
             )),
         }
-    }
-
-    /// Parse Statement
-    /// ---------------
-    /// `statement = assignment | expression`
-    ///
-    /// `assignment = NAME '=' expression`
-    pub fn parse_statement(&mut self) -> Result<Expr, String> {
-        if let Token::Name(name) = self.current().clone() {
-            let current_pos = self.pos;
-            self.pos += 1;
-
-            if self.current() == &Token::Assign {
-                self.pos += 1;
-                let value = self.parse_expression()?;
-                return Ok(Expr::Assign {
-                    name,
-                    value: Box::new(value),
-                });
-            } else {
-                self.pos = current_pos;
-            }
-        }
-
-        self.parse_expression()
     }
 }

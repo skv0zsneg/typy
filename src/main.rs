@@ -7,6 +7,7 @@ mod types;
 mod vm;
 
 use compiler::Compiler;
+use object::Object;
 use parser::Parser;
 use std::env;
 use std::io::{self, Write};
@@ -19,14 +20,34 @@ struct Config {
     debug: bool,
 }
 
-fn get_code_row() -> String {
-    print!(">>> ");
+fn read_line(prompt: &str) -> String {
+    print!("{}", prompt);
     io::stdout().flush().expect("Error on flushing");
-    let mut stdin_conetent = String::new();
+    let mut line = String::new();
     io::stdin()
-        .read_line(&mut stdin_conetent)
-        .expect("Error on readnig line.");
-    stdin_conetent
+        .read_line(&mut line)
+        .expect("Error on reading line.");
+    line
+}
+
+fn needs_block(line: &str) -> bool {
+    let trimmed = line.trim_end();
+    trimmed.ends_with(':')
+}
+
+fn is_block_end(line: &str) -> bool {
+    let trimmed = line.trim();
+
+    if trimmed.is_empty() {
+        return true;
+    }
+    if line.starts_with(' ') || line.starts_with('\t') {
+        return false;
+    }
+    if trimmed == "else:" || trimmed.starts_with("elif ") {
+        return false;
+    }
+    true
 }
 
 fn get_config_from_args() -> Config {
@@ -54,8 +75,34 @@ fn main() {
     let mut vm = VM::new();
     let mut interner = Interner::new();
     let mut checker = Checker::new();
+
     loop {
-        let source = get_code_row();
+        let mut source_buffer = Vec::new();
+        let mut in_block = false;
+
+        loop {
+            let prompt = if in_block { "... " } else { ">>> " };
+            let line = read_line(prompt);
+            if line.is_empty() {
+                println!();
+                return;
+            }
+
+            source_buffer.push(line.clone());
+
+            if !in_block {
+                if needs_block(&line) {
+                    in_block = true;
+                } else {
+                    break;
+                }
+            } else {
+                if is_block_end(&line) {
+                    break;
+                }
+            }
+        }
+        let source = source_buffer.join("");
 
         let tokens = tokenize(source);
         if config.debug {
@@ -63,7 +110,14 @@ fn main() {
         }
 
         let mut parser = Parser::new(tokens);
-        let ast = parser.parse().expect("Parsing error");
+        let ast = match parser.parse() {
+            Ok(ast) => ast,
+            Err(e) => {
+                eprintln!("{}", e);
+                continue;
+            }
+        };
+
         if config.debug {
             println!("\n[2] AST: {:#?}", ast);
         }
@@ -84,6 +138,7 @@ fn main() {
         }
 
         match vm.run(&bytecode, &interner, config.debug) {
+            Ok(Object::None) => {}
             Ok(result) => println!("{}", result),
             Err(e) => eprintln!("{}", e),
         }

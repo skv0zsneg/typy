@@ -4,6 +4,7 @@ use std::fmt;
 pub enum Object {
     Int(i64),
     Bool(bool),
+    None,
 }
 
 impl Object {
@@ -11,6 +12,7 @@ impl Object {
         match self {
             Object::Int(_) => "int",
             Object::Bool(_) => "bool",
+            Object::None => "NoneType",
         }
     }
 }
@@ -20,6 +22,7 @@ impl fmt::Display for Object {
         match self {
             Object::Int(n) => write!(f, "{}", n),
             Object::Bool(b) => write!(f, "{}", if *b { "True" } else { "False" }),
+            Object::None => write!(f, "None"),
         }
     }
 }

@@ -1,57 +1,107 @@
-/// Tokens using in languages
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    /// Signed 64 bit number.
     Number(i64),
 
-    /// Bolean "True"
     True,
-    /// Bolean "False"
     False,
 
-    /// Plus "+"
     Plus,
-    /// Minus "-"
     Minus,
-    /// Star "*"
     Star,
-    /// Slash "/"
     Slash,
 
-    /// Equal "=="
     Eq,
-    /// Equal "!="
     NotEq,
-    /// Greater ">"
     Greater,
-    /// Less "<"
     Less,
-    /// Greater equal ">="
     GreaterEq,
-    /// Less equal "<="
     LessEq,
 
-    /// Open paren "("
     LParen,
-    /// Closed paren ")"       
     RParen,
 
-    /// Name for variavle - string
     Name(String),
 
-    /// Assign "="
     Assign,
 
-    /// Flag end of code
+    Colon,
+    NewLine,
+    Indent,
+    Dedent,
+
+    If,
+    Else,
+
     Eof,
 }
 
-/// Tokenize incoming code.
 pub fn tokenize(input: String) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
 
+    let mut indent_stack = vec![0];
+    let mut at_line_start = true;
+
     while let Some(ch) = chars.next() {
+        if ch == '\n' {
+            tokens.push(Token::NewLine);
+            at_line_start = true;
+            continue;
+        }
+
+        if at_line_start {
+            if ch == ' ' || ch == '\t' {
+                let mut indent_level = if ch == ' ' { 1 } else { 4 };
+                while let Some(&next_c) = chars.peek() {
+                    if next_c == ' ' {
+                        indent_level += 1;
+                        chars.next();
+                    } else if next_c == '\t' {
+                        indent_level += 4;
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                if chars.peek() == Some(&'\n') || chars.peek().is_none() {
+                    continue;
+                }
+
+                let current_top = *indent_stack.last().unwrap();
+                if indent_level > current_top {
+                    indent_stack.push(indent_level);
+                    tokens.push(Token::Indent);
+                } else if indent_level < current_top {
+                    while let Some(&top) = indent_stack.last() {
+                        if top > indent_level {
+                            indent_stack.pop();
+                            tokens.push(Token::Dedent);
+                        } else {
+                            break;
+                        }
+                    }
+                    if *indent_stack.last().unwrap() != indent_level {
+                        panic!(
+                            "IndentationError: unindent does not match any outer indentation level"
+                        );
+                    }
+                }
+
+                at_line_start = false;
+            } else {
+                while let Some(&top) = indent_stack.last() {
+                    if top > 0 {
+                        indent_stack.pop();
+                        tokens.push(Token::Dedent);
+                    } else {
+                        break;
+                    }
+                }
+                at_line_start = false;
+            }
+        }
+
         if ch.is_whitespace() {
             continue;
         }
@@ -78,11 +128,11 @@ pub fn tokenize(input: String) -> Vec<Token> {
                     break;
                 }
             }
-
-            // Key words handling.
             match name.as_str() {
                 "True" => tokens.push(Token::True),
                 "False" => tokens.push(Token::False),
+                "if" => tokens.push(Token::If),
+                "else" => tokens.push(Token::Else),
                 _ => tokens.push(Token::Name(name)),
             }
             continue;
@@ -135,9 +185,23 @@ pub fn tokenize(input: String) -> Vec<Token> {
             '/' => tokens.push(Token::Slash),
             '(' => tokens.push(Token::LParen),
             ')' => tokens.push(Token::RParen),
+            ':' => tokens.push(Token::Colon),
             _ => panic!("SyntaxError: unknown token: {}", ch),
         }
     }
+
+    if let Some(last_token) = tokens.last()
+        && *last_token != Token::NewLine
+        && !tokens.is_empty()
+    {
+        tokens.push(Token::NewLine);
+    }
+
+    while indent_stack.len() > 1 {
+        indent_stack.pop();
+        tokens.push(Token::Dedent);
+    }
+
     tokens.push(Token::Eof);
     tokens
 }

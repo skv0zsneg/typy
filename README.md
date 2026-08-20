@@ -27,7 +27,21 @@ $ typy
 
 ## Contributing
 
-Language was written in Rust using a stack virtual machine. Before making PR, be sure that your code is successful:
+### Architecture
+
+Language written in Rust using stack virtual machine. All code goes through next steps:
+
+```mermaid
+graph TD
+    A(Tokenizer) -->|CST| B(Parser)
+    B -->|AST| C(Type Checker)
+    C -->|Type Validated AST| D(Compiler)
+    D -->|Bytecode| E(Virtual Machine)
+```
+
+### Making PR
+
+Before making PR, be sure that your code is successful:
 
 1. Formatted `cargo fmt --all -- --check`
 2. Linted `cargo clippy --locked --all-targets --all-features -- -D warnings`
