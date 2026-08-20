@@ -28,7 +28,11 @@ impl VM {
         interner: &Interner,
         debug: bool,
     ) -> Result<Object, String> {
-        for (ip, instruction) in bytecode.iter().enumerate() {
+        let mut ip = 0;
+
+        while ip < bytecode.len() {
+            let instruction = &bytecode[ip];
+
             if debug {
                 println!(
                     "  [IP:{:03}] {:?} | Stack: {:?}",
@@ -58,6 +62,12 @@ impl VM {
                     self.globals.insert(*sym_id, value);
                 }
 
+                Instruction::Pop => {
+                    self.stack
+                        .pop()
+                        .ok_or("SystemError: stack underflow at POP")?;
+                }
+
                 Instruction::Add => self.binary_op(|a, b| a.add(b))?,
                 Instruction::Subtract => self.binary_op(|a, b| a.sub(b))?,
                 Instruction::Multiply => self.binary_op(|a, b| a.mul(b))?,
@@ -69,12 +79,36 @@ impl VM {
                 Instruction::GreaterEq => self.compare_op(|a, b| a.ge(b))?,
                 Instruction::Less => self.compare_op(|a, b| a.lt(b))?,
                 Instruction::LessEq => self.compare_op(|a, b| a.le(b))?,
-            }
-        }
 
-        self.stack
-            .pop()
-            .ok_or_else(|| "SystemError: empty stack after execution".to_string())
+                Instruction::Jump(target) => {
+                    ip = *target;
+                    continue;
+                }
+
+                Instruction::JumpIfFalse(target) => {
+                    let condition = self
+                        .stack
+                        .pop()
+                        .ok_or("SystemError: stack underflow at JUMP_IF_FALSE")?;
+
+                    match condition {
+                        Object::Bool(false) => {
+                            ip = *target;
+                            continue;
+                        }
+                        Object::Bool(true) => {}
+                        _ => {
+                            return Err(format!(
+                                "TypeError: condition must be bool, got {}",
+                                condition.type_name()
+                            ));
+                        }
+                    }
+                }
+            }
+            ip += 1;
+        }
+        Ok(self.stack.pop().unwrap_or(Object::None))
     }
 
     fn binary_op<F>(&mut self, op: F) -> Result<(), String>

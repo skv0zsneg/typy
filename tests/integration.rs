@@ -1,147 +1,165 @@
 use typy::compiler::Compiler;
+use typy::object::Object;
 use typy::parser::Parser;
 use typy::symbol::Interner;
 use typy::tokenizer::tokenize;
 use typy::types::Checker;
 use typy::vm::VM;
 
-fn execute_one_line(source: &str) -> String {
+fn execute_program(source: &str) -> String {
     let tokens = tokenize(source.to_string());
     let mut parser = Parser::new(tokens);
-    let ast = parser.parse().expect("Parsing error");
+    let stmts = parser.parse().expect("Parsing error");
 
     let mut interner = Interner::new();
-
     let mut checker = Checker::new();
-    if let Err(e) = checker.check(&ast, &mut interner) {
+    if let Err(e) = checker.check(&stmts, &mut interner) {
         return e;
     }
 
     let compiler = Compiler::new();
-    let bytecode = compiler.compile(&ast, &mut interner);
+    let bytecode = compiler.compile(&stmts, &mut interner);
 
     let mut vm = VM::new();
     match vm.run(&bytecode, &interner, false) {
+        Ok(Object::None) => "None".to_string(),
         Ok(result) => format!("{}", result),
         Err(e) => e.to_string(),
     }
 }
 
-fn execute_several_lines(lines: Vec<&str>) -> Vec<String> {
-    let mut vm = VM::new();
-    let mut interner = Interner::new();
-    let mut checker = Checker::new();
-
-    let mut results: Vec<String> = Vec::new();
-
-    for line in lines {
-        let tokens = tokenize(line.to_string());
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse().expect("Parsing error");
-
-        if let Err(e) = checker.check(&ast, &mut interner) {
-            results.push(e);
-            continue;
-        }
-
-        let compiler = Compiler::new();
-        let bytecode = compiler.compile(&ast, &mut interner);
-
-        let result = match vm.run(&bytecode, &interner, false) {
-            Ok(result) => format!("{}", result),
-            Err(e) => e.to_string(),
-        };
-        results.push(result);
-    }
-    results
-}
-
 #[test]
 fn test_int_sum() {
-    assert_eq!(execute_one_line("2 + 2"), "4".to_string());
-    assert_eq!(execute_one_line("10 + 10"), "20".to_string());
-    assert_eq!(execute_one_line("0 + 0"), "0".to_string());
-    assert_eq!(execute_one_line("123 + 0"), "123".to_string());
+    assert_eq!(execute_program("2 + 2"), "4".to_string());
+    assert_eq!(execute_program("10 + 10"), "20".to_string());
+    assert_eq!(execute_program("0 + 0"), "0".to_string());
+    assert_eq!(execute_program("123 + 0"), "123".to_string());
 }
 
 #[test]
 fn test_int_sub() {
-    let result = execute_one_line("5 - 2");
+    let result = execute_program("5 - 2");
     assert_eq!(result, "3".to_string());
 }
 
 #[test]
 fn test_int_mul() {
-    let result = execute_one_line("2 * 5");
+    let result = execute_program("2 * 5");
     assert_eq!(result, "10".to_string());
 }
 
 #[test]
 fn test_int_div() {
-    let result = execute_one_line("10 / 5");
+    let result = execute_program("10 / 5");
     assert_eq!(result, "2".to_string());
 }
 
 #[test]
 fn test_int_zero_div() {
-    let result = execute_one_line("10 / 0");
+    let result = execute_program("10 / 0");
     assert_eq!(result, "ZeroDivisionError: division by zero".to_string());
 }
 
 #[test]
 fn test_int_vars() {
-    let result = execute_several_lines(vec!["x = 10", "x + 5"]);
-    assert_eq!(result, vec!["10".to_string(), "15".to_string()]);
+    let result = execute_program("x = 10\nx + 5");
+    assert_eq!(result, "15".to_string());
 }
 
 #[test]
 fn test_static_name_error() {
-    let result = execute_one_line("a + 1");
+    let result = execute_program("a + 1");
     assert_eq!(result, "NameError: name 'a' is not defined");
 }
 
 #[test]
 fn test_multiple_vars_persistence() {
-    let result = execute_several_lines(vec!["x = 10", "y = 20", "x + y"]);
-    assert_eq!(result, vec!["10", "20", "30"]);
+    let result = execute_program("x = 10\ny = 20\nx + y");
+    assert_eq!(result, "30".to_string());
 }
 
 #[test]
 fn test_bool_literal() {
-    let result = execute_one_line("True");
+    let result = execute_program("True");
     assert_eq!(result, "True".to_string());
-    let result = execute_one_line("False");
+    let result = execute_program("False");
     assert_eq!(result, "False".to_string());
 }
 
 #[test]
 fn test_comparison() {
-    let result = execute_one_line("10 > 5");
+    let result = execute_program("10 > 5");
     assert_eq!(result, "True".to_string());
-    let result = execute_one_line("2 == 2");
+    let result = execute_program("2 == 2");
     assert_eq!(result, "True".to_string());
-    let result = execute_one_line("3 < 1");
+    let result = execute_program("3 < 1");
     assert_eq!(result, "False".to_string());
 }
 
 #[test]
 fn test_precedence() {
-    let result = execute_one_line("2 + 3 < 10");
+    let result = execute_program("2 + 3 < 10");
     assert_eq!(result, "True".to_string());
-    let result = execute_one_line("2 < 3 + 4");
+    let result = execute_program("2 < 3 + 4");
     assert_eq!(result, "True".to_string());
 }
 
 #[test]
 fn test_static_type_error() {
-    let result = execute_one_line("10 + True");
+    let result = execute_program("10 + True");
     assert_eq!(
         result,
         "TypeError: unsupported operand types for arithmetic: 'int' and 'bool'".to_string()
     );
-    let result = execute_one_line("10 < True");
+    let result = execute_program("10 < True");
     assert_eq!(
         result,
         "TypeError: cannot compare 'int' and 'bool'".to_string()
     );
+}
+
+#[test]
+fn test_if_true_branch() {
+    let source = "if True:\n    10\n";
+    assert_eq!(execute_program(source), "10");
+}
+
+#[test]
+fn test_if_false_branch() {
+    let source = "if False:\n    10\nelse:\n    20\n";
+    assert_eq!(execute_program(source), "20");
+}
+
+#[test]
+fn test_if_assign_in_block() {
+    let source = "x = 5\nif x > 3:\n    x = 100\nx\n";
+    assert_eq!(execute_program(source), "100");
+}
+
+#[test]
+fn test_nested_if() {
+    let source = "x = 10\nif True:\n    if False:\n        x = 1\n    else:\n        x = 2\nx\n";
+    assert_eq!(execute_program(source), "2");
+}
+
+#[test]
+fn test_assign_prints_none() {
+    // Присваивание не должно возвращать значение для печати
+    let source = "x = 10\n";
+    assert_eq!(execute_program(source), "None");
+}
+
+#[test]
+fn test_static_if_condition_error() {
+    let source = "if 1:\n    10\n";
+    assert_eq!(
+        execute_program(source),
+        "TypeError: if condition must be bool, got 'int'"
+    );
+}
+
+#[test]
+fn test_precedence_still_works() {
+    let source = "2 + 3 < 10\n";
+    assert_eq!(execute_program(source), "True");
 }

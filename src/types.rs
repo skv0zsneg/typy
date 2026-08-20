@@ -1,4 +1,4 @@
-use crate::parser::{Expr, Operator};
+use crate::parser::{Expr, Operator, Stmt};
 use crate::symbol::{Interner, SymbolId};
 use std::collections::HashMap;
 
@@ -6,7 +6,6 @@ use std::collections::HashMap;
 pub enum Type {
     Int,
     Bool,
-    // TODO: Float, Str, Function, etc.
 }
 
 impl Type {
@@ -35,14 +34,58 @@ impl Checker {
         }
     }
 
-    pub fn check(&mut self, expr: &Expr, interner: &mut Interner) -> Result<Type, String> {
-        self.check_expr(expr, interner)
+    pub fn check(&mut self, stmts: &[Stmt], interner: &mut Interner) -> Result<(), String> {
+        for stmt in stmts {
+            self.check_stmt(stmt, interner)?;
+        }
+        Ok(())
+    }
+
+    fn check_stmt(&mut self, stmt: &Stmt, interner: &mut Interner) -> Result<(), String> {
+        match stmt {
+            Stmt::Expr(expr) => {
+                self.check_expr(expr, interner)?;
+                Ok(())
+            }
+
+            Stmt::Assign { name, value } => {
+                let val_type = self.check_expr(value, interner)?;
+                let sym_id = interner.intern(name);
+                self.env.insert(sym_id, val_type);
+                Ok(())
+            }
+
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_type = self.check_expr(condition, interner)?;
+                if cond_type != Type::Bool {
+                    return Err(format!(
+                        "TypeError: if condition must be bool, got '{}'",
+                        cond_type.name()
+                    ));
+                }
+
+                for s in then_branch {
+                    self.check_stmt(s, interner)?;
+                }
+
+                if let Some(else_block) = else_branch {
+                    for s in else_block {
+                        self.check_stmt(s, interner)?;
+                    }
+                }
+
+                Ok(())
+            }
+        }
     }
 
     fn check_expr(&mut self, expr: &Expr, interner: &mut Interner) -> Result<Type, String> {
         match expr {
             Expr::Number(_) => Ok(Type::Int),
-
             Expr::Bool(_) => Ok(Type::Bool),
 
             Expr::Name(name) => {
@@ -51,13 +94,6 @@ impl Checker {
                     .get(&sym_id)
                     .copied()
                     .ok_or_else(|| format!("NameError: name '{}' is not defined", name))
-            }
-
-            Expr::Assign { name, value } => {
-                let val_type = self.check_expr(value, interner)?;
-                let sym_id = interner.intern(name);
-                self.env.insert(sym_id, val_type);
-                Ok(val_type)
             }
 
             Expr::BinaryOp { left, op, right } => {
