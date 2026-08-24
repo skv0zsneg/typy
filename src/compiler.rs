@@ -67,8 +67,10 @@ impl Compiler {
             Stmt::If {
                 condition,
                 then_branch,
+                elif_branches,
                 else_branch,
             } => {
+                // TODO: Implement elif handing
                 self.compile_expr(condition, interner);
 
                 let jump_false_idx = self.code.len();

@@ -58,6 +58,7 @@ impl Checker {
             Stmt::If {
                 condition,
                 then_branch,
+                elif_branches,
                 else_branch,
             } => {
                 let cond_type = self.check_expr(condition, interner)?;
@@ -66,6 +67,19 @@ impl Checker {
                         "TypeError: if condition must be bool, got '{}'",
                         cond_type.name()
                     ));
+                }
+
+                for (condition, branch) in elif_branches {
+                    let cond_type = self.check_expr(condition, interner)?;
+                    if cond_type != Type::Bool {
+                        return Err(format!(
+                            "TypeError: if condition must be bool, got '{}'",
+                            cond_type.name()
+                        ));
+                    }
+                    for stmt in branch {
+                        self.check_stmt(stmt, interner)?;
+                    }
                 }
 
                 for s in then_branch {

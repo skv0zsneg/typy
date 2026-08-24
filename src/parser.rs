@@ -22,6 +22,7 @@ pub enum Stmt {
     If {
         condition: Expr,
         then_branch: Vec<Stmt>,
+        elif_branches: Vec<(Expr, Vec<Stmt>)>,
         else_branch: Option<Vec<Stmt>>,
     },
 }
@@ -110,12 +111,21 @@ impl Parser {
 
     /// Parse If Statement
     /// ------------------
-    /// `if-statement = 'if' expression ':' block ['else' block]`
+    /// `if-statement = 'if' expression ':' block (['elif' expression ':' block]* ['else' block])`
     fn parse_if_statement(&mut self) -> Result<Stmt, String> {
         self.eat(Token::If)?;
         let condition = self.parse_expression()?;
         self.eat(Token::Colon)?;
         let then_branch = self.parse_block()?;
+
+        let mut elif_branches = Vec::new();
+        while self.current() == &Token::Elif {
+            self.pos += 1;
+            let condition = self.parse_expression()?;
+            self.eat(Token::Colon)?;
+            let branch = self.parse_block()?;
+            elif_branches.push((condition, branch));
+        }
 
         let else_branch = if self.current() == &Token::Else {
             self.pos += 1;
@@ -128,6 +138,7 @@ impl Parser {
         Ok(Stmt::If {
             condition,
             then_branch,
+            elif_branches,
             else_branch,
         })
     }

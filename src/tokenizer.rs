@@ -30,6 +30,7 @@ pub enum Token {
     Dedent,
 
     If,
+    Elif,
     Else,
 
     Eof,
@@ -132,6 +133,7 @@ pub fn tokenize(input: String) -> Vec<Token> {
                 "True" => tokens.push(Token::True),
                 "False" => tokens.push(Token::False),
                 "if" => tokens.push(Token::If),
+                "elif" => tokens.push(Token::Elif),
                 "else" => tokens.push(Token::Else),
                 _ => tokens.push(Token::Name(name)),
             }
