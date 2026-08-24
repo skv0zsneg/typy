@@ -70,35 +70,49 @@ impl Compiler {
                 elif_branches,
                 else_branch,
             } => {
-                // TODO: Implement elif handing
-                self.compile_expr(condition, interner);
+                let mut end_jumps = Vec::new();
 
-                let jump_false_idx = self.code.len();
+                self.compile_expr(condition, interner);
+                let mut false_jump_idx = self.code.len();
                 self.code.push(Instruction::JumpIfFalse(0));
 
-                for s in then_branch {
-                    self.compile_stmt(s, interner);
+                for stmt in then_branch {
+                    self.compile_stmt(stmt, interner);
                 }
 
-                match else_branch {
-                    Some(else_block) => {
-                        let jump_end_idx = self.code.len();
-                        self.code.push(Instruction::Jump(0));
+                let jump_end_idx = self.code.len();
+                self.code.push(Instruction::Jump(0));
+                end_jumps.push(jump_end_idx);
 
-                        let else_start = self.code.len();
-                        self.code[jump_false_idx] = Instruction::JumpIfFalse(else_start);
+                for (elif_condition, elif_branch) in elif_branches {
+                    let elif_start = self.code.len();
+                    self.code[false_jump_idx] = Instruction::JumpIfFalse(elif_start);
 
-                        for s in else_block {
-                            self.compile_stmt(s, interner);
-                        }
+                    self.compile_expr(elif_condition, interner);
+                    false_jump_idx = self.code.len();
+                    self.code.push(Instruction::JumpIfFalse(0));
 
-                        let end_idx = self.code.len();
-                        self.code[jump_end_idx] = Instruction::Jump(end_idx);
+                    for stmt in elif_branch {
+                        self.compile_stmt(stmt, interner);
                     }
-                    None => {
-                        let end_idx = self.code.len();
-                        self.code[jump_false_idx] = Instruction::JumpIfFalse(end_idx);
+
+                    let jump_end_idx = self.code.len();
+                    self.code.push(Instruction::Jump(0));
+                    end_jumps.push(jump_end_idx);
+                }
+
+                let fallback_start = self.code.len();
+                self.code[false_jump_idx] = Instruction::JumpIfFalse(fallback_start);
+
+                if let Some(else_block) = else_branch {
+                    for stmt in else_block {
+                        self.compile_stmt(stmt, interner);
                     }
+                }
+
+                let end = self.code.len();
+                for jump_idx in end_jumps {
+                    self.code[jump_idx] = Instruction::Jump(end);
                 }
             }
         }

@@ -163,3 +163,21 @@ fn test_precedence_still_works() {
     let source = "2 + 3 < 10\n";
     assert_eq!(execute_program(source), "True");
 }
+
+#[test]
+fn test_elif_selects_matching_branch() {
+    let source = "x = 2\nif x == 1:\n    10\nelif x == 2:\n    20\nelse:\n    30\n";
+    assert_eq!(execute_program(source), "20");
+}
+
+#[test]
+fn test_elif_skips_later_branches() {
+    let source = "if True:\n    10\nelif True:\n    20\nelse:\n    30\n";
+    assert_eq!(execute_program(source), "10");
+}
+
+#[test]
+fn test_elif_falls_through_without_else() {
+    let source = "if False:\n    10\nelif True:\n    20\n";
+    assert_eq!(execute_program(source), "20");
+}
