@@ -18,9 +18,7 @@ We also support REPL:
 $ typy
 === TyPy (v 0.1.0) ===
 >>> a = 10
-10
 >>> b = 20
-20
 >>> b / a
 2
 ```
