@@ -17,10 +17,10 @@ We also support REPL:
 ```bash
 $ typy
 === TyPy (v 0.1.0) ===
->>> a = 10
->>> b = 20
->>> b / a
-2
+>>> a: int = 10
+>>> b: int = 20
+>>> b * a
+200
 ```
 
 ## Contributing
