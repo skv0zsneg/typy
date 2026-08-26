@@ -62,7 +62,7 @@ fn test_int_zero_div() {
 
 #[test]
 fn test_int_vars() {
-    let result = execute_program("x = 10\nx + 5");
+    let result = execute_program("x: int = 10\nx + 5");
     assert_eq!(result, "15".to_string());
 }
 
@@ -74,8 +74,14 @@ fn test_static_name_error() {
 
 #[test]
 fn test_multiple_vars_persistence() {
-    let result = execute_program("x = 10\ny = 20\nx + y");
+    let result = execute_program("x: int = 10\ny: int = 20\nx + y");
     assert_eq!(result, "30".to_string());
+}
+
+#[test]
+fn test_bool_with_type_annotation() {
+    let result = execute_program("x: bool = True\ny: bool = False\nx == y");
+    assert_eq!(result, "False".to_string());
 }
 
 #[test]
@@ -132,20 +138,20 @@ fn test_if_false_branch() {
 
 #[test]
 fn test_if_assign_in_block() {
-    let source = "x = 5\nif x > 3:\n    x = 100\nx\n";
+    let source = "x: int = 5\nif x > 3:\n    x = 100\nx\n";
     assert_eq!(execute_program(source), "100");
 }
 
 #[test]
 fn test_nested_if() {
-    let source = "x = 10\nif True:\n    if False:\n        x = 1\n    else:\n        x = 2\nx\n";
+    let source = "x: int = 10\nif True:\n    if False:\n        x = 1\n    else:\n        x = 2\nx\n";
     assert_eq!(execute_program(source), "2");
 }
 
 #[test]
 fn test_assign_prints_none() {
     // Присваивание не должно возвращать значение для печати
-    let source = "x = 10\n";
+    let source = "x: int = 10\n";
     assert_eq!(execute_program(source), "None");
 }
 
@@ -166,18 +172,18 @@ fn test_precedence_still_works() {
 
 #[test]
 fn test_elif_selects_matching_branch() {
-    let source = "x = 2\nif x == 1:\n    10\nelif x == 2:\n    20\nelse:\n    30\n";
+    let source = "x: int = 2\nif x == 1:\n    10\nelif x == 2:\n    20\nelse:\n    30\n";
     assert_eq!(execute_program(source), "20");
 }
 
 #[test]
 fn test_elif_skips_later_branches() {
-    let source = "if True:\n    10\nelif True:\n    20\nelse:\n    30\n";
+    let source = "x: int = 10\nif True:\n    10\nelif True:\n    20\nelse:\n    30\n";
     assert_eq!(execute_program(source), "10");
 }
 
 #[test]
 fn test_elif_falls_through_without_else() {
-    let source = "if False:\n    10\nelif True:\n    20\n";
+    let source = "x: int = 10\nif False:\n    10\nelif True:\n    20\n";
     assert_eq!(execute_program(source), "20");
 }
