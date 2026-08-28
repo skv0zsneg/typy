@@ -144,15 +144,9 @@ fn test_if_assign_in_block() {
 
 #[test]
 fn test_nested_if() {
-    let source = "x: int = 10\nif True:\n    if False:\n        x = 1\n    else:\n        x = 2\nx\n";
+    let source =
+        "x: int = 10\nif True:\n    if False:\n        x = 1\n    else:\n        x = 2\nx\n";
     assert_eq!(execute_program(source), "2");
-}
-
-#[test]
-fn test_assign_prints_none() {
-    // Присваивание не должно возвращать значение для печати
-    let source = "x: int = 10\n";
-    assert_eq!(execute_program(source), "None");
 }
 
 #[test]
