@@ -1,6 +1,7 @@
 use crate::object::Object;
 use crate::parser::{Expr, Operator, Stmt};
 use crate::symbol::{Interner, SymbolId};
+use crate::types::Type;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -8,7 +9,6 @@ pub enum Instruction {
     LoadConst(Object),
     LoadName(SymbolId),
     StoreName(SymbolId),
-    Pop,
 
     // Arithmetic
     Add,
@@ -57,11 +57,30 @@ impl Compiler {
                 self.compile_expr(expr, interner);
             }
 
+            Stmt::VariableDecl {
+                name,
+                typ,
+                initializer,
+            } => {
+                let sym_id = interner.intern(name);
+
+                if let Some(init) = initializer {
+                    self.compile_expr(init, interner);
+                } else {
+                    // Zero-Initialization
+                    match typ {
+                        Type::Int => self.code.push(Instruction::LoadConst(Object::Int(0))),
+                        Type::Bool => self.code.push(Instruction::LoadConst(Object::Bool(false))),
+                    }
+                }
+
+                self.code.push(Instruction::StoreName(sym_id));
+            }
+
             Stmt::Assign { name, value } => {
                 self.compile_expr(value, interner);
                 let sym_id = interner.intern(name);
                 self.code.push(Instruction::StoreName(sym_id));
-                self.code.push(Instruction::Pop);
             }
 
             Stmt::If {

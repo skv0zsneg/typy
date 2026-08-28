@@ -1,4 +1,5 @@
 use crate::tokenizer::Token;
+use crate::types::Type;
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
@@ -15,6 +16,11 @@ pub enum Expr {
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
+    VariableDecl {
+        name: String,
+        typ: Type,
+        initializer: Option<Expr>,
+    },
     Assign {
         name: String,
         value: Expr,
@@ -33,7 +39,6 @@ pub enum Operator {
     Minus,
     Star,
     Slash,
-
     Eq,
     NotEq,
     Less,
@@ -89,7 +94,14 @@ impl Parser {
 
     /// Parse Statement
     /// ---------------
-    /// `statement = (if-statement | NAME '=' expression | expression)`
+    ///
+    /// statement = (
+    ///     if-statement |
+    ///     NAME ':' TYPE ['=' expression] |
+    ///     NAME '=' expression |
+    ///     expression
+    /// )
+    ///
     fn parse_statement(&mut self) -> Result<Stmt, String> {
         if self.current() == &Token::If {
             return self.parse_if_statement();
@@ -97,6 +109,22 @@ impl Parser {
         if let Token::Name(name) = self.current().clone() {
             let saved_pos = self.pos;
             self.pos += 1;
+
+            if self.current() == &Token::Colon {
+                self.pos += 1;
+                let typ = self.parse_type()?;
+                let initializer = if self.current() == &Token::Assign {
+                    self.pos += 1;
+                    Some(self.parse_expression()?)
+                } else {
+                    None
+                };
+                return Ok(Stmt::VariableDecl {
+                    name,
+                    typ,
+                    initializer,
+                });
+            }
 
             if self.current() == &Token::Assign {
                 self.pos += 1;
@@ -107,6 +135,24 @@ impl Parser {
         }
         let expr = self.parse_expression()?;
         Ok(Stmt::Expr(expr))
+    }
+
+    fn parse_type(&mut self) -> Result<Type, String> {
+        if let Token::Name(name) = self.current().clone() {
+            match name.as_str() {
+                "int" => {
+                    self.pos += 1;
+                    Ok(Type::Int)
+                }
+                "bool" => {
+                    self.pos += 1;
+                    Ok(Type::Bool)
+                }
+                _ => Err(format!("SyntaxError: unknown type {:?}", name)),
+            }
+        } else {
+            Err("SyntaxError: expected type annotation".to_string())
+        }
     }
 
     /// Parse If Statement

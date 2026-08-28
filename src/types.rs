@@ -48,10 +48,47 @@ impl Checker {
                 Ok(())
             }
 
-            Stmt::Assign { name, value } => {
-                let val_type = self.check_expr(value, interner)?;
+            Stmt::VariableDecl {
+                name,
+                typ,
+                initializer,
+            } => {
                 let sym_id = interner.intern(name);
-                self.env.insert(sym_id, val_type);
+                if self.env.contains_key(&sym_id) {
+                    return Err(format!("TypeError: {} already defined", name));
+                }
+
+                if let Some(init) = initializer {
+                    let init_type = self.check_expr(init, interner)?;
+                    if init_type != *typ {
+                        return Err(format!(
+                            "TypeError: mismatched types '{}' expected to be '{}', got '{}'",
+                            name,
+                            typ.name(),
+                            init_type.name()
+                        ));
+                    }
+                }
+                self.env.insert(sym_id, *typ);
+                Ok(())
+            }
+
+            Stmt::Assign { name, value } => {
+                let sym_id = interner.intern(name);
+                let expected_type = match self.env.get(&sym_id) {
+                    Some(expected_type) => *expected_type,
+                    None => return Err(format!("TypeError: variable '{}' not defined", name)),
+                };
+
+                let val_type = self.check_expr(value, interner)?;
+                if expected_type != val_type {
+                    return Err(format!(
+                        "TypeError: mismatched types '{}' expected to be '{}', but got '{}'",
+                        name,
+                        expected_type.name(),
+                        val_type.name()
+                    ));
+                }
                 Ok(())
             }
 

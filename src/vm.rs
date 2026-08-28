@@ -62,12 +62,6 @@ impl VM {
                     self.globals.insert(*sym_id, value);
                 }
 
-                Instruction::Pop => {
-                    self.stack
-                        .pop()
-                        .ok_or("SystemError: stack underflow at POP")?;
-                }
-
                 Instruction::Add => self.binary_op(|a, b| a.add(b))?,
                 Instruction::Subtract => self.binary_op(|a, b| a.sub(b))?,
                 Instruction::Multiply => self.binary_op(|a, b| a.mul(b))?,
