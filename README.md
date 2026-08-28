@@ -18,7 +18,9 @@ We also support REPL:
 $ typy
 === TyPy (v 0.1.0) ===
 >>> a: int = 10
+10
 >>> b: int = 20
+20
 >>> b * a
 200
 ```
