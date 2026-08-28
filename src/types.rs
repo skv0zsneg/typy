@@ -17,19 +17,19 @@ impl Type {
     }
 }
 
-pub struct Checker {
+pub struct TypeChecker {
     env: HashMap<SymbolId, Type>,
 }
 
-impl Default for Checker {
+impl Default for TypeChecker {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Checker {
+impl TypeChecker {
     pub fn new() -> Self {
-        Checker {
+        TypeChecker {
             env: HashMap::new(),
         }
     }

@@ -3,7 +3,7 @@ use typy::object::Object;
 use typy::parser::Parser;
 use typy::symbol::Interner;
 use typy::tokenizer::tokenize;
-use typy::types::Checker;
+use typy::types::TypeChecker;
 use typy::vm::VM;
 
 fn execute_program(source: &str) -> String {
@@ -12,7 +12,7 @@ fn execute_program(source: &str) -> String {
     let stmts = parser.parse().expect("Parsing error");
 
     let mut interner = Interner::new();
-    let mut checker = Checker::new();
+    let mut checker = TypeChecker::new();
     if let Err(e) = checker.check(&stmts, &mut interner) {
         return e;
     }

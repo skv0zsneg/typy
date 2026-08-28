@@ -13,7 +13,7 @@ use std::env;
 use std::io::{self, Write};
 use symbol::Interner;
 use tokenizer::tokenize;
-use types::Checker;
+use types::TypeChecker;
 use vm::VM;
 
 struct Config {
@@ -74,7 +74,7 @@ fn main() {
 
     let mut vm = VM::new();
     let mut interner = Interner::new();
-    let mut checker = Checker::new();
+    let mut type_checker = TypeChecker::new();
 
     loop {
         let mut source_buffer = Vec::new();
@@ -122,7 +122,7 @@ fn main() {
             println!("\n[2] AST: {:#?}", ast);
         }
 
-        match checker.check(&ast, &mut interner) {
+        match type_checker.check(&ast, &mut interner) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("{}", e);
