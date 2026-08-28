@@ -181,3 +181,18 @@ fn test_elif_falls_through_without_else() {
     let source = "x: int = 10\nif False:\n    10\nelif True:\n    20\n";
     assert_eq!(execute_program(source), "20");
 }
+
+#[test]
+fn test_scope_bad() {
+    let source = "if True:\n    x: int = 10\nx + 10\n";
+    assert_eq!(
+        execute_program(source),
+        "TypeError: cannot find name 'x' in current scope"
+    );
+}
+
+#[test]
+fn test_scope_good() {
+    let source = "x: int = 10\nif True:\n    x: bool = False\nx + 15\n";
+    assert_eq!(execute_program(source), "25");
+}
