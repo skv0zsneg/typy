@@ -18,7 +18,7 @@ impl Type {
 }
 
 pub struct TypeChecker {
-    env: HashMap<SymbolId, Type>,
+    scopes: Vec<HashMap<SymbolId, Type>>,
 }
 
 impl Default for TypeChecker {
@@ -30,8 +30,41 @@ impl Default for TypeChecker {
 impl TypeChecker {
     pub fn new() -> Self {
         TypeChecker {
-            env: HashMap::new(),
+            scopes: vec![HashMap::new()],
         }
+    }
+
+    fn current_scope(&mut self) -> &mut HashMap<SymbolId, Type> {
+        self.scopes.last_mut().unwrap()
+    }
+
+    fn enter_block(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn exit_block(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn resolve(&self, sym_id: SymbolId) -> Option<&Type> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(typ) = scope.get(&sym_id) {
+                return Some(typ);
+            }
+        }
+        None
+    }
+
+    fn declare(&mut self, sym_id: SymbolId, typ: Type, interner: &Interner) -> Result<(), String> {
+        let current = self.current_scope();
+        if current.contains_key(&sym_id) {
+            return Err(format!(
+                "Variable '{}' already declared in this scope",
+                interner.resolve(sym_id)
+            ));
+        }
+        current.insert(sym_id, typ);
+        Ok(())
     }
 
     pub fn check(&mut self, stmts: &[Stmt], interner: &mut Interner) -> Result<(), String> {
@@ -54,9 +87,6 @@ impl TypeChecker {
                 initializer,
             } => {
                 let sym_id = interner.intern(name);
-                if self.env.contains_key(&sym_id) {
-                    return Err(format!("TypeError: {} already defined", name));
-                }
 
                 if let Some(init) = initializer {
                     let init_type = self.check_expr(init, interner)?;
@@ -69,13 +99,14 @@ impl TypeChecker {
                         ));
                     }
                 }
-                self.env.insert(sym_id, *typ);
+
+                self.declare(sym_id, *typ, interner)?;
                 Ok(())
             }
 
             Stmt::Assign { name, value } => {
                 let sym_id = interner.intern(name);
-                let expected_type = match self.env.get(&sym_id) {
+                let expected_type = match self.resolve(sym_id) {
                     Some(expected_type) => *expected_type,
                     None => return Err(format!("TypeError: variable '{}' not defined", name)),
                 };
@@ -101,32 +132,39 @@ impl TypeChecker {
                 let cond_type = self.check_expr(condition, interner)?;
                 if cond_type != Type::Bool {
                     return Err(format!(
-                        "TypeError: if condition must be bool, got '{}'",
+                        "TypeError: if condition must be 'bool', got '{}'",
                         cond_type.name()
                     ));
                 }
 
-                for (condition, branch) in elif_branches {
-                    let cond_type = self.check_expr(condition, interner)?;
-                    if cond_type != Type::Bool {
+                self.enter_block();
+                for stmt in then_branch {
+                    self.check_stmt(stmt, interner)?;
+                }
+                self.exit_block();
+
+                for (elif_cond, elif_branch) in elif_branches {
+                    let elif_cond_type = self.check_expr(elif_cond, interner)?;
+                    if elif_cond_type != Type::Bool {
                         return Err(format!(
-                            "TypeError: if condition must be bool, got '{}'",
-                            cond_type.name()
+                            "TypeError: elif condition must be 'bool', got '{}'",
+                            elif_cond_type.name()
                         ));
                     }
-                    for stmt in branch {
+
+                    self.enter_block();
+                    for stmt in elif_branch {
                         self.check_stmt(stmt, interner)?;
                     }
-                }
-
-                for s in then_branch {
-                    self.check_stmt(s, interner)?;
+                    self.exit_block();
                 }
 
                 if let Some(else_block) = else_branch {
-                    for s in else_block {
-                        self.check_stmt(s, interner)?;
+                    self.enter_block();
+                    for stmt in else_block {
+                        self.check_stmt(stmt, interner)?;
                     }
+                    self.exit_block();
                 }
 
                 Ok(())
@@ -141,8 +179,7 @@ impl TypeChecker {
 
             Expr::Name(name) => {
                 let sym_id = interner.intern(name);
-                self.env
-                    .get(&sym_id)
+                self.resolve(sym_id)
                     .copied()
                     .ok_or_else(|| format!("NameError: name '{}' is not defined", name))
             }

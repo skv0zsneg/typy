@@ -2,21 +2,26 @@ use crate::object::Object;
 use crate::parser::{Expr, Operator, Stmt};
 use crate::symbol::{Interner, SymbolId};
 use crate::types::Type;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    // Vars & constants
     LoadConst(Object),
+
     LoadName(SymbolId),
     StoreName(SymbolId),
 
-    // Arithmetic
+    LoadLocal(usize),
+    StoreLocal(usize),
+
+    EnterBlock(usize),
+    ExitBlock,
+
     Add,
     Subtract,
     Multiply,
     Divide,
 
-    // Comparison
     Eq,
     NotEq,
     Less,
@@ -24,12 +29,16 @@ pub enum Instruction {
     LessEq,
     GreaterEq,
 
-    // Jump on conditions
     Jump(usize),
     JumpIfFalse(usize),
 }
 
+pub struct CompilerScope {
+    locals: Vec<SymbolId>,
+}
+
 pub struct Compiler {
+    scopes: Vec<CompilerScope>,
     code: Vec<Instruction>,
 }
 
@@ -41,7 +50,86 @@ impl Default for Compiler {
 
 impl Compiler {
     pub fn new() -> Self {
-        Compiler { code: Vec::new() }
+        Self {
+            scopes: vec![CompilerScope { locals: Vec::new() }],
+            code: Vec::new(),
+        }
+    }
+
+    // Helpers
+
+    fn emit(&mut self, instruction: Instruction) {
+        self.code.push(instruction);
+    }
+
+    fn current_address(&self) -> usize {
+        self.code.len()
+    }
+
+    fn emit_jump_placeholder(&mut self, instruction: Instruction) -> usize {
+        let idx = self.code.len();
+        self.code.push(instruction);
+        idx
+    }
+
+    fn patch_jump(&mut self, idx: usize, target: usize) {
+        match &mut self.code[idx] {
+            Instruction::Jump(t) => *t = target,
+            Instruction::JumpIfFalse(t) => *t = target,
+            _ => panic!("Cannot patch non-jump instruction"),
+        }
+    }
+
+    // Scope management
+
+    fn enter_scope(&mut self) {
+        self.scopes.push(CompilerScope { locals: Vec::new() });
+    }
+
+    fn exit_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn declare_local(&mut self, sym_id: SymbolId) -> usize {
+        let scope = self.scopes.last_mut().unwrap();
+        let index = scope.locals.len();
+        scope.locals.push(sym_id);
+        index
+    }
+
+    fn resolve_local(&self, sym_id: SymbolId) -> Option<usize> {
+        let scope = self.scopes.last().unwrap();
+        scope.locals.iter().position(|&id| id == sym_id)
+    }
+
+    fn is_in_block(&self) -> bool {
+        self.scopes.len() > 1
+    }
+
+    fn count_block_locals(&self, stmts: &[Stmt], interner: &mut Interner) -> usize {
+        let mut seen = HashSet::new();
+        for stmt in stmts {
+            if let Stmt::VariableDecl { name, .. } = stmt {
+                let sym_id = interner.intern(name);
+                seen.insert(sym_id);
+            }
+        }
+        seen.len()
+    }
+
+    // Block Comlile
+
+    fn compile_block(&mut self, stmts: &[Stmt], interner: &mut Interner) {
+        let num_locals = self.count_block_locals(stmts, interner);
+        self.emit(Instruction::EnterBlock(num_locals));
+
+        self.enter_scope();
+        for stmt in stmts {
+            self.compile_stmt(stmt, interner);
+        }
+        self.exit_scope();
+
+        self.emit(Instruction::ExitBlock);
     }
 
     pub fn compile(mut self, stmts: &[Stmt], interner: &mut Interner) -> Vec<Instruction> {
@@ -67,20 +155,29 @@ impl Compiler {
                 if let Some(init) = initializer {
                     self.compile_expr(init, interner);
                 } else {
-                    // Zero-Initialization
                     match typ {
-                        Type::Int => self.code.push(Instruction::LoadConst(Object::Int(0))),
-                        Type::Bool => self.code.push(Instruction::LoadConst(Object::Bool(false))),
+                        Type::Int => self.emit(Instruction::LoadConst(Object::Int(0))),
+                        Type::Bool => self.emit(Instruction::LoadConst(Object::Bool(false))),
                     }
                 }
 
-                self.code.push(Instruction::StoreName(sym_id));
+                if self.is_in_block() {
+                    let slot = self.declare_local(sym_id);
+                    self.emit(Instruction::StoreLocal(slot));
+                } else {
+                    self.emit(Instruction::StoreName(sym_id));
+                }
             }
 
             Stmt::Assign { name, value } => {
                 self.compile_expr(value, interner);
                 let sym_id = interner.intern(name);
-                self.code.push(Instruction::StoreName(sym_id));
+
+                if let Some(slot) = self.resolve_local(sym_id) {
+                    self.emit(Instruction::StoreLocal(slot));
+                } else {
+                    self.emit(Instruction::StoreName(sym_id));
+                }
             }
 
             Stmt::If {
@@ -92,46 +189,36 @@ impl Compiler {
                 let mut end_jumps = Vec::new();
 
                 self.compile_expr(condition, interner);
-                let mut false_jump_idx = self.code.len();
-                self.code.push(Instruction::JumpIfFalse(0));
+                let mut false_jump_idx = self.emit_jump_placeholder(Instruction::JumpIfFalse(0));
 
-                for stmt in then_branch {
-                    self.compile_stmt(stmt, interner);
-                }
+                self.compile_block(then_branch, interner);
 
-                let jump_end_idx = self.code.len();
-                self.code.push(Instruction::Jump(0));
+                let jump_end_idx = self.emit_jump_placeholder(Instruction::Jump(0));
                 end_jumps.push(jump_end_idx);
 
                 for (elif_condition, elif_branch) in elif_branches {
-                    let elif_start = self.code.len();
-                    self.code[false_jump_idx] = Instruction::JumpIfFalse(elif_start);
+                    let elif_start = self.current_address();
+                    self.patch_jump(false_jump_idx, elif_start);
 
                     self.compile_expr(elif_condition, interner);
-                    false_jump_idx = self.code.len();
-                    self.code.push(Instruction::JumpIfFalse(0));
+                    false_jump_idx = self.emit_jump_placeholder(Instruction::JumpIfFalse(0));
 
-                    for stmt in elif_branch {
-                        self.compile_stmt(stmt, interner);
-                    }
+                    self.compile_block(elif_branch, interner);
 
-                    let jump_end_idx = self.code.len();
-                    self.code.push(Instruction::Jump(0));
+                    let jump_end_idx = self.emit_jump_placeholder(Instruction::Jump(0));
                     end_jumps.push(jump_end_idx);
                 }
 
-                let fallback_start = self.code.len();
-                self.code[false_jump_idx] = Instruction::JumpIfFalse(fallback_start);
+                let fallback_start = self.current_address();
+                self.patch_jump(false_jump_idx, fallback_start);
 
                 if let Some(else_block) = else_branch {
-                    for stmt in else_block {
-                        self.compile_stmt(stmt, interner);
-                    }
+                    self.compile_block(else_block, interner);
                 }
 
-                let end = self.code.len();
+                let end = self.current_address();
                 for jump_idx in end_jumps {
-                    self.code[jump_idx] = Instruction::Jump(end);
+                    self.patch_jump(jump_idx, end);
                 }
             }
         }
@@ -140,29 +227,33 @@ impl Compiler {
     fn compile_expr(&mut self, expr: &Expr, interner: &mut Interner) {
         match expr {
             Expr::Number(n) => {
-                self.code.push(Instruction::LoadConst(Object::Int(*n)));
+                self.emit(Instruction::LoadConst(Object::Int(*n)));
             }
             Expr::Bool(b) => {
-                self.code.push(Instruction::LoadConst(Object::Bool(*b)));
+                self.emit(Instruction::LoadConst(Object::Bool(*b)));
             }
             Expr::Name(name) => {
                 let sym_id = interner.intern(name);
-                self.code.push(Instruction::LoadName(sym_id));
+                if let Some(slot) = self.resolve_local(sym_id) {
+                    self.emit(Instruction::LoadLocal(slot));
+                } else {
+                    self.emit(Instruction::LoadName(sym_id));
+                }
             }
             Expr::BinaryOp { left, op, right } => {
                 self.compile_expr(left, interner);
                 self.compile_expr(right, interner);
                 match op {
-                    Operator::Plus => self.code.push(Instruction::Add),
-                    Operator::Minus => self.code.push(Instruction::Subtract),
-                    Operator::Star => self.code.push(Instruction::Multiply),
-                    Operator::Slash => self.code.push(Instruction::Divide),
-                    Operator::Eq => self.code.push(Instruction::Eq),
-                    Operator::NotEq => self.code.push(Instruction::NotEq),
-                    Operator::Greater => self.code.push(Instruction::Greater),
-                    Operator::GreaterEq => self.code.push(Instruction::GreaterEq),
-                    Operator::Less => self.code.push(Instruction::Less),
-                    Operator::LessEq => self.code.push(Instruction::LessEq),
+                    Operator::Plus => self.emit(Instruction::Add),
+                    Operator::Minus => self.emit(Instruction::Subtract),
+                    Operator::Star => self.emit(Instruction::Multiply),
+                    Operator::Slash => self.emit(Instruction::Divide),
+                    Operator::Eq => self.emit(Instruction::Eq),
+                    Operator::NotEq => self.emit(Instruction::NotEq),
+                    Operator::Greater => self.emit(Instruction::Greater),
+                    Operator::GreaterEq => self.emit(Instruction::GreaterEq),
+                    Operator::Less => self.emit(Instruction::Less),
+                    Operator::LessEq => self.emit(Instruction::LessEq),
                 }
             }
         }

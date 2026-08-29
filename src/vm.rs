@@ -3,8 +3,24 @@ use crate::object::Object;
 use crate::symbol::{Interner, SymbolId};
 use std::collections::HashMap;
 
+#[derive(Debug)]
+pub struct CallFrame {
+    locals: Vec<Object>,
+    _ip_offset: usize, // Not using by now
+}
+
+impl CallFrame {
+    pub fn new(ip_offset: usize, num_locals: usize) -> Self {
+        Self {
+            locals: vec![Object::None; num_locals],
+            _ip_offset: ip_offset,
+        }
+    }
+}
+
 pub struct VM {
     stack: Vec<Object>,
+    frames: Vec<CallFrame>,
     globals: HashMap<SymbolId, Object>,
 }
 
@@ -18,8 +34,13 @@ impl VM {
     pub fn new() -> Self {
         VM {
             stack: Vec::new(),
+            frames: vec![CallFrame::new(0, 0)],
             globals: HashMap::new(),
         }
+    }
+
+    fn current_frame(&mut self) -> &mut CallFrame {
+        self.frames.last_mut().unwrap()
     }
 
     pub fn run(
@@ -32,13 +53,6 @@ impl VM {
 
         while ip < bytecode.len() {
             let instruction = &bytecode[ip];
-
-            if debug {
-                println!(
-                    "  [IP:{:03}] {:?} | Stack: {:?}",
-                    ip, instruction, self.stack
-                );
-            }
 
             match instruction {
                 Instruction::LoadConst(val) => {
@@ -60,6 +74,39 @@ impl VM {
                         .ok_or("SystemError: stack underflow at STORE_NAME")?
                         .clone();
                     self.globals.insert(*sym_id, value);
+                }
+
+                Instruction::LoadLocal(slot) => {
+                    let frame = self.current_frame();
+                    if *slot >= frame.locals.len() {
+                        return Err(format!("SystemError: local slot {} out of bounds", slot));
+                    }
+                    let value = frame.locals[*slot].clone();
+                    self.stack.push(value);
+                }
+
+                Instruction::StoreLocal(slot) => {
+                    let value = self
+                        .stack
+                        .pop()
+                        .ok_or("SystemError: stack underflow at STORE_LOCAL")?;
+
+                    let frame = self.current_frame();
+                    if *slot >= frame.locals.len() {
+                        return Err(format!("SystemError: local slot {} out of bounds", slot));
+                    }
+                    frame.locals[*slot] = value;
+                }
+
+                Instruction::EnterBlock(num_locals) => {
+                    self.frames.push(CallFrame::new(ip, *num_locals));
+                }
+
+                Instruction::ExitBlock => {
+                    if self.frames.len() <= 1 {
+                        return Err("SystemError: cannot exit global frame".to_string());
+                    }
+                    self.frames.pop();
                 }
 
                 Instruction::Add => self.binary_op(|a, b| a.add(b))?,
@@ -101,6 +148,18 @@ impl VM {
                 }
             }
             ip += 1;
+
+            if debug {
+                println!(
+                    "  [IP:{:03}] {:?} | Stack: {:?} | Globals: {:?} | Frames ({}): {:?}",
+                    ip,
+                    instruction,
+                    self.stack,
+                    self.globals,
+                    self.frames.len(),
+                    self.frames,
+                );
+            }
         }
         Ok(self.stack.pop().unwrap_or(Object::None))
     }
