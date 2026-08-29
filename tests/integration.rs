@@ -154,7 +154,7 @@ fn test_static_if_condition_error() {
     let source = "if 1:\n    10\n";
     assert_eq!(
         execute_program(source),
-        "TypeError: if condition must be bool, got 'int'"
+        "TypeError: if condition must be 'bool', got 'int'"
     );
 }
 
@@ -187,7 +187,7 @@ fn test_scope_bad() {
     let source = "if True:\n    x: int = 10\nx + 10\n";
     assert_eq!(
         execute_program(source),
-        "TypeError: cannot find name 'x' in current scope"
+        "NameError: name 'x' is not defined"
     );
 }
 
