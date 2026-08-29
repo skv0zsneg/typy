@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog 1.1.0], and this project adheres to
 - Support for `elif` branches in conditional statements, including parsing,
   static type checking, bytecode compilation, and integration coverage.
 - Definition of variable with types is required now `a: int` with defaults or assing in place `a: int = 10`.
+- Add scope support for block. Outer variable now available in inner scopes and can be redefined.
 
 ## [0.1.1] - 2026-08-21
 
