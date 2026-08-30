@@ -196,3 +196,28 @@ fn test_scope_good() {
     let source = "x: int = 10\nif True:\n    x: bool = False\nx + 15\n";
     assert_eq!(execute_program(source), "25");
 }
+
+#[test]
+fn test_function_def_and_call_type_check() {
+    let source = r#"
+def add(a: int, b: int) -> int:
+    return a + b
+
+result: int = add(2, 3)
+"#;
+    assert_eq!(execute_program(source), "5");
+}
+
+#[test]
+fn test_function_call_type_mismatch() {
+    let source = r#"
+def add(a: int, b: int) -> int:
+    return a + b
+
+result = add(2, True)
+"#;
+    assert_eq!(
+        execute_program(source),
+        "TypeError: mismatch types add's 'b' argument expected to be 'int' but got 'bool'"
+    );
+}
