@@ -60,6 +60,12 @@ pub enum Token {
     /// The `:` delimiter.
     Colon,
 
+    /// The `,` separate operator.
+    Comma,
+
+    /// The `->` return type symbol.
+    RArrow,
+
     /// A logical line terminator.
     NewLine,
 
@@ -77,6 +83,12 @@ pub enum Token {
 
     /// The `else` keyword.
     Else,
+
+    /// The `def` keyword.
+    Def,
+
+    /// The `return` keyword.
+    Return,
 
     /// End of input.
     Eof,
@@ -99,13 +111,6 @@ pub fn tokenize_str(input: &str) -> Vec<Token> {
 }
 
 /// Internal lexical analyzer state.
-///
-/// The tokenizer is modeled after a small subset of CPython's tokenizer
-/// behavior: it emits `NEWLINE`, `INDENT`, and `DEDENT` tokens.
-///
-/// This version is intentionally simpler than CPython's real tokenizer.
-/// It does not support comments, string literals, floating point numbers,
-/// continuation lines, or full CPython tab expansion rules.
 struct Tokenizer<'input> {
     chars: Peekable<Chars<'input>>,
     tokens: Vec<Token>,
@@ -343,6 +348,15 @@ impl<'input> Tokenizer<'input> {
                 }
                 true
             }
+            '-' => {
+                if self.peek_is('>') {
+                    self.chars.next();
+                    self.push(Token::RArrow);
+                } else {
+                    self.push(Token::Minus);
+                }
+                true
+            }
             _ => false,
         }
     }
@@ -353,12 +367,12 @@ impl<'input> Tokenizer<'input> {
     fn scan_punctuation(&mut self, ch: char) {
         let token = match ch {
             '+' => Token::Plus,
-            '-' => Token::Minus,
             '*' => Token::Star,
             '/' => Token::Slash,
             '(' => Token::LParen,
             ')' => Token::RParen,
             ':' => Token::Colon,
+            ',' => Token::Comma,
             _ => Self::unknown_token(ch),
         };
 
@@ -427,6 +441,8 @@ fn keyword_token(name: &str) -> Option<Token> {
         "if" => Some(Token::If),
         "elif" => Some(Token::Elif),
         "else" => Some(Token::Else),
+        "def" => Some(Token::Def),
+        "return" => Some(Token::Return),
         _ => None,
     }
 }

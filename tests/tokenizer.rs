@@ -126,3 +126,64 @@ fn unknown_token_panics() {
 fn overflowing_integer_panics() {
     let _ = tokenize_str("999999999999999999999999999999");
 }
+
+
+#[test]
+fn simple_function_definition() {
+    let input = "def add(a: int, b: int) -> int:\n    return a + b\n";
+
+    assert_eq!(
+        tokenize_str(input),
+        vec![
+            Token::Def,
+            name("add"),
+            Token::LParen,
+            name("a"),
+            Token::Colon,
+            name("int"),
+            Token::Comma,
+            name("b"),
+            Token::Colon,
+            name("int"),
+            Token::RParen,
+            Token::RArrow,
+            name("int"),
+            Token::Colon,
+            Token::NewLine,
+            Token::Indent,
+            Token::Return,
+            name("a"),
+            Token::Plus,
+            name("b"),
+            Token::NewLine,
+            Token::Dedent,
+            Token::Eof,
+        ]
+    );
+}
+
+
+#[test]
+fn function_definition_without_args() {
+    let input = "def get_1() -> int:\n    return 1\n";
+
+    assert_eq!(
+        tokenize_str(input),
+        vec![
+            Token::Def,
+            name("get_1"),
+            Token::LParen,
+            Token::RParen,
+            Token::RArrow,
+            name("int"),
+            Token::Colon,
+            Token::NewLine,
+            Token::Indent,
+            Token::Return,
+            Token::Number(1),
+            Token::NewLine,
+            Token::Dedent,
+            Token::Eof,
+        ]
+    );
+}
