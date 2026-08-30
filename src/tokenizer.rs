@@ -1,207 +1,432 @@
+use std::iter::Peekable;
+use std::str::Chars;
+
+/// A lexical token recognized by the interpreter.
+///
+/// This enum intentionally keeps a small, Python-like token set.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
+    /// An integer literal.
     Number(i64),
 
+    /// The boolean literal `True`.
     True,
+
+    /// The boolean literal `False`.
     False,
 
+    /// The `+` operator.
     Plus,
+
+    /// The `-` operator.
     Minus,
+
+    /// The `*` operator.
     Star,
+
+    /// The `/` operator.
     Slash,
 
+    /// The `==` operator.
     Eq,
+
+    /// The `!=` operator.
     NotEq,
+
+    /// The `>` operator.
     Greater,
+
+    /// The `<` operator.
     Less,
+
+    /// The `>=` operator.
     GreaterEq,
+
+    /// The `<=` operator.
     LessEq,
 
+    /// The `(` delimiter.
     LParen,
+
+    /// The `)` delimiter.
     RParen,
 
+    /// An identifier that is not a keyword.
     Name(String),
 
+    /// The `=` assignment operator.
     Assign,
 
+    /// The `:` delimiter.
     Colon,
+
+    /// A logical line terminator.
     NewLine,
+
+    /// An increase in indentation level.
     Indent,
+
+    /// A decrease in indentation level.
     Dedent,
 
+    /// The `if` keyword.
     If,
+
+    /// The `elif` keyword.
+    Elif,
+
+    /// The `else` keyword.
     Else,
 
+    /// End of input.
     Eof,
 }
 
+/// Tokenizes an owned string.
+///
+/// This entry point is preserved for backward compatibility. It delegates to
+/// [`tokenize_str`], because the lexer only needs to borrow its input.
 pub fn tokenize(input: String) -> Vec<Token> {
-    let mut tokens = Vec::new();
-    let mut chars = input.chars().peekable();
+    tokenize_str(&input)
+}
 
-    let mut indent_stack = vec![0];
-    let mut at_line_start = true;
+/// Tokenizes a string slice.
+///
+/// This is a more efficient and more idiomatic entry point when the caller
+/// already has a `&str`.
+pub fn tokenize_str(input: &str) -> Vec<Token> {
+    Tokenizer::new(input).tokenize()
+}
 
-    while let Some(ch) = chars.next() {
-        if ch == '\n' {
-            tokens.push(Token::NewLine);
-            at_line_start = true;
-            continue;
+/// Internal lexical analyzer state.
+///
+/// The tokenizer is modeled after a small subset of CPython's tokenizer
+/// behavior: it emits `NEWLINE`, `INDENT`, and `DEDENT` tokens.
+///
+/// This version is intentionally simpler than CPython's real tokenizer.
+/// It does not support comments, string literals, floating point numbers,
+/// continuation lines, or full CPython tab expansion rules.
+struct Tokenizer<'input> {
+    chars: Peekable<Chars<'input>>,
+    tokens: Vec<Token>,
+    indent_stack: Vec<usize>,
+    at_line_start: bool,
+}
+
+impl<'input> Tokenizer<'input> {
+    /// Creates a tokenizer for the given input.
+    fn new(input: &'input str) -> Self {
+        Self {
+            chars: input.chars().peekable(),
+            tokens: Vec::new(),
+            indent_stack: vec![0],
+            at_line_start: true,
         }
+    }
 
-        if at_line_start {
-            if ch == ' ' || ch == '\t' {
-                let mut indent_level = if ch == ' ' { 1 } else { 4 };
-                while let Some(&next_c) = chars.peek() {
-                    if next_c == ' ' {
-                        indent_level += 1;
-                        chars.next();
-                    } else if next_c == '\t' {
-                        indent_level += 4;
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
+    /// Runs the tokenizer to completion and returns the token stream.
+    fn tokenize(mut self) -> Vec<Token> {
+        while let Some(ch) = self.chars.next() {
+            if ch == '\n' {
+                self.push(Token::NewLine);
+                self.at_line_start = true;
+                continue;
+            }
 
-                if chars.peek() == Some(&'\n') || chars.peek().is_none() {
+            if self.at_line_start {
+                if ch == ' ' || ch == '\t' {
+                    self.handle_indentation(ch);
                     continue;
                 }
 
-                let current_top = *indent_stack.last().unwrap();
-                if indent_level > current_top {
-                    indent_stack.push(indent_level);
-                    tokens.push(Token::Indent);
-                } else if indent_level < current_top {
-                    while let Some(&top) = indent_stack.last() {
-                        if top > indent_level {
-                            indent_stack.pop();
-                            tokens.push(Token::Dedent);
-                        } else {
-                            break;
-                        }
-                    }
-                    if *indent_stack.last().unwrap() != indent_level {
-                        panic!(
-                            "IndentationError: unindent does not match any outer indentation level"
-                        );
-                    }
+                self.emit_dedents_to_zero();
+                self.at_line_start = false;
+            }
+
+            if ch.is_whitespace() {
+                continue;
+            }
+
+            if ch.is_ascii_digit() {
+                self.scan_number(ch);
+                continue;
+            }
+
+            if is_name_start(ch) {
+                self.scan_name(ch);
+                continue;
+            }
+
+            if self.scan_operator(ch) {
+                continue;
+            }
+
+            self.scan_punctuation(ch);
+        }
+
+        self.finish();
+        self.tokens
+    }
+
+    /// Pushes a token into the output stream.
+    fn push(&mut self, token: Token) {
+        self.tokens.push(token);
+    }
+
+    /// Returns true if the next character is exactly `expected`.
+    fn peek_is(&mut self, expected: char) -> bool {
+        self.chars.peek() == Some(&expected)
+    }
+
+    /// Returns true if there are no more characters.
+    fn peek_is_none(&mut self) -> bool {
+        self.chars.peek().is_none()
+    }
+
+    /// Returns the current indentation level.
+    ///
+    /// The stack should always contain at least the base level `0`.
+    /// If it ever does not, we conservatively return `0` instead of panicking.
+    fn current_indent(&self) -> usize {
+        self.indent_stack.last().copied().unwrap_or(0)
+    }
+
+    /// Handles indentation at the beginning of a logical line.
+    ///
+    /// This function consumes all leading spaces and tabs, decides whether
+    /// the indentation changed, and emits `INDENT` or `DEDENT` tokens.
+    ///
+    /// Blank lines and trailing whitespace at EOF do not affect indentation.
+    fn handle_indentation(&mut self, first: char) {
+        let mut indent_level = Self::indent_width(first);
+
+        while let Some(&next_ch) = self.chars.peek() {
+            match next_ch {
+                ' ' => {
+                    indent_level += 1;
+                    self.chars.next();
                 }
-
-                at_line_start = false;
-            } else {
-                while let Some(&top) = indent_stack.last() {
-                    if top > 0 {
-                        indent_stack.pop();
-                        tokens.push(Token::Dedent);
-                    } else {
-                        break;
-                    }
+                '\t' => {
+                    indent_level += 4;
+                    self.chars.next();
                 }
-                at_line_start = false;
+                _ => break,
             }
         }
 
-        if ch.is_whitespace() {
-            continue;
+        // Blank lines and trailing whitespace at EOF do not affect indentation.
+        if self.peek_is('\n') || self.peek_is_none() {
+            return;
         }
 
-        if ch.is_ascii_digit() {
-            let mut num_str = ch.to_string();
-            while let Some(&next_ch) = chars.peek() {
-                if next_ch.is_ascii_digit() {
-                    num_str.push(chars.next().unwrap());
-                } else {
-                    break;
-                }
+        let current_indent = self.current_indent();
+
+        if indent_level > current_indent {
+            self.indent_stack.push(indent_level);
+            self.push(Token::Indent);
+        } else if indent_level < current_indent {
+            while self.current_indent() > indent_level {
+                let _ = self.indent_stack.pop();
+                self.push(Token::Dedent);
             }
-            tokens.push(Token::Number(num_str.parse::<i64>().unwrap()));
-            continue;
+
+            if self.current_indent() != indent_level {
+                Self::indentation_error();
+            }
         }
 
-        if ch.is_alphabetic() || ch == '_' {
-            let mut name = ch.to_string();
-            while let Some(&next_ch) = chars.peek() {
-                if next_ch.is_alphanumeric() || next_ch == '_' {
-                    name.push(chars.next().unwrap());
-                } else {
-                    break;
-                }
-            }
-            match name.as_str() {
-                "True" => tokens.push(Token::True),
-                "False" => tokens.push(Token::False),
-                "if" => tokens.push(Token::If),
-                "else" => tokens.push(Token::Else),
-                _ => tokens.push(Token::Name(name)),
-            }
-            continue;
-        }
+        self.at_line_start = false;
+    }
 
-        if ch == '<' {
-            if chars.peek() == Some(&'=') {
-                chars.next();
-                tokens.push(Token::LessEq);
+    /// Returns the width of a single indentation character.
+    ///
+    /// This keeps the original simplified behavior: a tab advances by four
+    /// columns. CPython uses more complex tab expansion rules.
+    fn indent_width(ch: char) -> usize {
+        if ch == '\t' { 4 } else { 1 }
+    }
+
+    /// Emits `DEDENT` tokens until indentation returns to zero.
+    ///
+    /// This is used when a non-whitespace character appears at the beginning
+    /// of a line while the tokenizer is inside an indented block.
+    fn emit_dedents_to_zero(&mut self) {
+        while self.current_indent() > 0 {
+            let _ = self.indent_stack.pop();
+            self.push(Token::Dedent);
+        }
+    }
+
+    /// Scans an integer literal.
+    ///
+    /// The first digit character has already been consumed.
+    fn scan_number(&mut self, first: char) {
+        let mut text = String::new();
+        text.push(first);
+
+        while let Some(&next_ch) = self.chars.peek() {
+            if next_ch.is_ascii_digit() {
+                self.chars.next();
+                text.push(next_ch);
             } else {
-                tokens.push(Token::Less);
+                break;
             }
-            continue;
         }
 
-        if ch == '>' {
-            if chars.peek() == Some(&'=') {
-                chars.next();
-                tokens.push(Token::GreaterEq);
+        let value = text
+            .parse::<i64>()
+            .unwrap_or_else(|_| Self::invalid_number(&text));
+
+        self.push(Token::Number(value));
+    }
+
+    /// Scans an identifier or keyword.
+    ///
+    /// The first identifier character has already been consumed.
+    fn scan_name(&mut self, first: char) {
+        let mut name = String::new();
+        name.push(first);
+
+        while let Some(&next_ch) = self.chars.peek() {
+            if is_name_continue(next_ch) {
+                self.chars.next();
+                name.push(next_ch);
             } else {
-                tokens.push(Token::Greater);
+                break;
             }
-            continue;
         }
 
-        if ch == '=' {
-            if chars.peek() == Some(&'=') {
-                chars.next();
-                tokens.push(Token::Eq);
-            } else {
-                tokens.push(Token::Assign);
-            }
-            continue;
+        match keyword_token(&name) {
+            Some(keyword) => self.push(keyword),
+            None => self.push(Token::Name(name)),
         }
+    }
 
-        if ch == '!' {
-            if chars.peek() == Some(&'=') {
-                chars.next();
-                tokens.push(Token::NotEq);
-            } else {
-                panic!("SyntaxError: unknown token: !");
-            }
-            continue;
-        }
-
+    /// Tries to scan a multi-character or single-character operator.
+    ///
+    /// Returns `true` if the character was handled as an operator.
+    fn scan_operator(&mut self, ch: char) -> bool {
         match ch {
-            '+' => tokens.push(Token::Plus),
-            '-' => tokens.push(Token::Minus),
-            '*' => tokens.push(Token::Star),
-            '/' => tokens.push(Token::Slash),
-            '(' => tokens.push(Token::LParen),
-            ')' => tokens.push(Token::RParen),
-            ':' => tokens.push(Token::Colon),
-            _ => panic!("SyntaxError: unknown token: {}", ch),
+            '<' => {
+                if self.peek_is('=') {
+                    self.chars.next();
+                    self.push(Token::LessEq);
+                } else {
+                    self.push(Token::Less);
+                }
+                true
+            }
+            '>' => {
+                if self.peek_is('=') {
+                    self.chars.next();
+                    self.push(Token::GreaterEq);
+                } else {
+                    self.push(Token::Greater);
+                }
+                true
+            }
+            '=' => {
+                if self.peek_is('=') {
+                    self.chars.next();
+                    self.push(Token::Eq);
+                } else {
+                    self.push(Token::Assign);
+                }
+                true
+            }
+            '!' => {
+                if self.peek_is('=') {
+                    self.chars.next();
+                    self.push(Token::NotEq);
+                } else {
+                    Self::unknown_token(ch);
+                }
+                true
+            }
+            _ => false,
         }
     }
 
-    if let Some(last_token) = tokens.last()
-        && *last_token != Token::NewLine
-        && !tokens.is_empty()
-    {
-        tokens.push(Token::NewLine);
+    /// Scans a single-character punctuation token.
+    ///
+    /// Unknown characters are treated as syntax errors.
+    fn scan_punctuation(&mut self, ch: char) {
+        let token = match ch {
+            '+' => Token::Plus,
+            '-' => Token::Minus,
+            '*' => Token::Star,
+            '/' => Token::Slash,
+            '(' => Token::LParen,
+            ')' => Token::RParen,
+            ':' => Token::Colon,
+            _ => Self::unknown_token(ch),
+        };
+
+        self.push(token);
     }
 
-    while indent_stack.len() > 1 {
-        indent_stack.pop();
-        tokens.push(Token::Dedent);
+    /// Finalizes the token stream.
+    ///
+    /// This adds a trailing `NEWLINE` if needed, closes all remaining open
+    /// indentation levels with `DEDENT` tokens, and finally emits `EOF`.
+    fn finish(&mut self) {
+        if let Some(last_token) = self.tokens.last()
+            && *last_token != Token::NewLine
+        {
+            self.push(Token::NewLine);
+        }
+
+        while self.indent_stack.len() > 1 {
+            let _ = self.indent_stack.pop();
+            self.push(Token::Dedent);
+        }
+
+        self.push(Token::Eof);
     }
 
-    tokens.push(Token::Eof);
-    tokens
+    /// Reports an indentation mismatch.
+    ///
+    /// This is kept as a panic for backward compatibility. A production-grade
+    /// implementation should return a `Result` with a structured diagnostic.
+    fn indentation_error() -> ! {
+        panic!("IndentationError: unindent does not match any outer indentation level");
+    }
+
+    /// Reports an unknown token.
+    ///
+    /// This is kept as a panic for backward compatibility. A production-grade
+    /// implementation should return a `Result` with a structured diagnostic.
+    fn unknown_token(ch: char) -> ! {
+        panic!("SyntaxError: unknown token: {}", ch);
+    }
+
+    /// Reports an invalid or overflowing integer literal.
+    ///
+    /// This is kept as a panic for backward compatibility. A production-grade
+    /// implementation should return a `Result` with a structured diagnostic.
+    fn invalid_number(text: &str) -> ! {
+        panic!("SyntaxError: invalid integer literal: {}", text);
+    }
+}
+
+/// Returns true if the character can start an identifier.
+fn is_name_start(ch: char) -> bool {
+    ch.is_alphabetic() || ch == '_'
+}
+
+/// Returns true if the character can continue an identifier.
+fn is_name_continue(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_'
+}
+
+/// Maps an identifier string to a keyword token, if applicable.
+fn keyword_token(name: &str) -> Option<Token> {
+    match name {
+        "True" => Some(Token::True),
+        "False" => Some(Token::False),
+        "if" => Some(Token::If),
+        "elif" => Some(Token::Elif),
+        "else" => Some(Token::Else),
+        _ => None,
+    }
 }
