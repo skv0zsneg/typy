@@ -127,7 +127,6 @@ fn overflowing_integer_panics() {
     let _ = tokenize_str("999999999999999999999999999999");
 }
 
-
 #[test]
 fn simple_function_definition() {
     let input = "def add(a: int, b: int) -> int:\n    return a + b\n";
@@ -162,7 +161,6 @@ fn simple_function_definition() {
     );
 }
 
-
 #[test]
 fn function_definition_without_args() {
     let input = "def get_1() -> int:\n    return 1\n";
@@ -183,6 +181,41 @@ fn function_definition_without_args() {
             Token::Number(1),
             Token::NewLine,
             Token::Dedent,
+            Token::Eof,
+        ]
+    );
+}
+
+#[test]
+fn function_call() {
+    let input = "foo()";
+
+    assert_eq!(
+        tokenize_str(input),
+        vec![
+            name("foo"),
+            Token::LParen,
+            Token::RParen,
+            Token::NewLine,
+            Token::Eof,
+        ]
+    );
+}
+
+#[test]
+fn function_call_with_args() {
+    let input = "foo(a, b)";
+
+    assert_eq!(
+        tokenize_str(input),
+        vec![
+            name("foo"),
+            Token::LParen,
+            name("a"),
+            Token::Comma,
+            name("b"),
+            Token::RParen,
+            Token::NewLine,
             Token::Eof,
         ]
     );
