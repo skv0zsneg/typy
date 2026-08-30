@@ -2,17 +2,48 @@
 
 _**Ty**ped **Py**thon_
 
-> ⚠️ Under Developing
+> ⚠️ Under Development
 
-Programming Language fully inspired by Python. The Goal of it is to build clean and maintanable code using best of Python world. That's why this language is:
+A programming language inspired by Python. The goal is to build clean and maintainable code using the best of the Python ecosystem. The language is:
 
-1. Static Typed
-2. Simple
-3. Small
+1. **Statically Typed** — catches type errors at compile time
+2. **Simple** — minimal syntax and semantics
+3. **Small** — focused feature set with predictable behavior
+
+## Features
+
+- Static type system with `int` and `bool` types
+- Python-like syntax with indentation-based blocks
+- Conditional statements (`if` / `elif` / `else`)
+- Arithmetic and comparison operators
+- Stack-based bytecode virtual machine
+- Interactive REPL for quick experimentation
+- File execution with filename validation
 
 ## Quick Start
 
-We also support REPL:
+### Execute a File
+
+Create a file `example.tp` with snake_case naming:
+
+```python
+a: int = 10
+b: int = 20
+result: int = a * b
+```
+
+Run it with:
+
+```bash
+$ typy example.tp
+200
+```
+
+TyPy enforces filename must have the `.tp` extension.
+
+### Interactive REPL
+
+We also support an interactive REPL:
 
 ```bash
 $ typy
@@ -29,7 +60,7 @@ $ typy
 
 ### Architecture
 
-Language written in Rust using stack virtual machine. All code goes through next steps:
+The language is written in Rust using a stack-based virtual machine. All code goes through the following pipeline:
 
 ```mermaid
 graph TD
@@ -41,9 +72,11 @@ graph TD
 
 ### Making PR
 
-Before making PR, be sure that your code is successful:
+Before submitting a PR, ensure your code passes:
 
 1. Formatted `cargo fmt --all -- --check`
 2. Linted `cargo clippy --locked --all-targets --all-features -- -D warnings`
 3. Tested `cargo test --locked --all-features --verbose`
 4. Built `cargo build --locked --verbose`
+
+You can use `just` for quick check `$ just check-all`
