@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["crates/typy-vm", "crates/typy-runner"]
