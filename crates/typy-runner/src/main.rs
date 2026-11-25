@@ -1,6 +1,5 @@
-fn main() -> Option<i32> {
+fn main() {
     let num = 100;
     let res = typy_vm::add(num, num);
-    println!("Hello, world! {num} plus {num} is {}!", res?);
-    res
+    println!("Hello, world! {num} plus {num} is {}!", res.unwrap());
 }
