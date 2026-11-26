@@ -35,7 +35,7 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features --locked
       - name: Release build
-        run: cargo build --workspace --release --build
+        run: cargo build --workspace --release --locked
 
   embedded:
     runs-on: ubuntu-latest
