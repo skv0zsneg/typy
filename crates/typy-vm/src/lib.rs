@@ -1,6 +1,8 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+pub mod bytecode;
+
 pub fn add(left: i32, right: i32) -> Option<i32> {
     left.checked_add(right)
 }
